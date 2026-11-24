@@ -1,4 +1,7 @@
-# Changelog
+﻿# Changelog
+
+## 1.0.4 (1.0.3 was published by mistake with the 1.0.2 code)
+- New: right-click -> "Save diagnostics" writes `%APPDATA%\BatteryWidget\diagnostic.txt` (Bluetooth devices, USB/HID collections of the supported brands, what Corsair and PlayStation devices answer). Attach it to an issue to get a device supported.
 
 ## 1.0.2
 - Corsair: the Katar / Slipstream family talks to its dongle with an unnumbered report; the widget now tries both framings and every vendor HID collection (with a back-off so it stays cheap). `--debug` lists the Corsair collections it sees.
@@ -17,3 +20,4 @@
 - Per-user installer that enables start with Windows; uninstaller registered in "Installed apps".
 - Line icons; hides while any app is full screen on the same monitor; stays above the taskbar when you use Start/tray.
 - More brands: Logitech HID++ (no G HUB needed), Razer, Corsair and more HyperX headsets, Bluetooth LE devices (ASUS, Redragon, ...).
+

@@ -24,7 +24,7 @@ namespace BatteryWidget
             { "Se apagó por batería (calibrar)", "It ran out (calibrate)" }, { "Autonomía aprendida", "Learned battery life" },
             { "Pantalla", "Screen" }, { "Automática", "Automatic" }, { "Principal", "Primary" }, { "Secundaria", "Secondary" },
             { "Restablecer posición", "Reset position" }, { "Actualizar ahora", "Refresh now" }, { "Iniciar con Windows", "Start with Windows" },
-            { "Salir", "Exit" }, { "Restablecer", "Reset" },
+            { "Salir", "Exit" }, { "Restablecer", "Reset" }, { "Guardar diagnóstico", "Save diagnostics" },
             { "Sin dispositivos conectados", "No devices connected" },
             { "Enciende un teclado, mouse o auricular inalámbrico.", "Turn on a wireless keyboard, mouse or headset." },
             { "Cargando", "Charging" }, { "Conectado", "Connected" }, { "Estimado", "Estimated" }, { "estimado", "estimated" },

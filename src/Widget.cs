@@ -746,6 +746,13 @@ namespace BatteryWidget
             m.Items.Add(Sep());
 
             var rf = Mi("Actualizar ahora"); rf.Click += (s, e) => hub.RefreshNow(); m.Items.Add(rf);
+            var dg = Mi("Guardar diagnóstico");
+            dg.Click += (s, e) => System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { var p = Diagnostics.Write(); System.Diagnostics.Process.Start("explorer.exe", "/select,\"" + p + "\""); }
+                catch (Exception dex) { Log.Err("diagnostics: " + dex); }
+            });
+            m.Items.Add(dg);
             var auto = Mi("Iniciar con Windows"); auto.IsCheckable = true; auto.IsChecked = Config.GetAutoStart();
             auto.Click += (s, e) => Config.SetAutoStart(auto.IsChecked); m.Items.Add(auto);
             m.Items.Add(Sep());

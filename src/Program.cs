@@ -20,6 +20,7 @@ namespace BatteryWidget
 
         static void Run(string[] args)
         {
+            if (Array.IndexOf(args, "--diag") >= 0) { Console.Out.Flush(); try { Diagnostics.Write(); } catch (Exception e) { Log.Err("diag: " + e); } return; }
             bool created;
             using (var mutex = new Mutex(true, "Local\\BatteryWidget.TaskbarWidget", out created))
             {

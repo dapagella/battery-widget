@@ -101,3 +101,9 @@ Independent project, not affiliated with or endorsed by Logitech, HyperX, GameSi
 ## Credits
 
 Device protocols are based on the open-source documentation of [HeadsetControl](https://github.com/Sapd/HeadsetControl), [OpenRazer](https://openrazer.github.io/), [Solaar](https://github.com/pwr-Solaar/Solaar) (Logitech HID++) and [PadSquire](https://github.com/Magniswerfer/padsquire). Line icons are drawn in the style of [Lucide](https://lucide.dev) (ISC).
+
+## My device doesn't show up
+
+1. Make sure it is **on and connected** (wired devices are not shown).
+2. Right-click the widget → **Save diagnostics**. It writes `diagnostic.txt` (opens its folder) with the names and USB ids Windows sees and what Corsair / PlayStation devices answer — no personal data.
+3. [Open an issue](../../issues/new) and attach that file with the exact model. That is all that's needed to add a device.

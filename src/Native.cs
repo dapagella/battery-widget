@@ -238,6 +238,39 @@ namespace BatteryWidget
 
         /// <summary>Optionally reads a feature report (some pads only start streaming full reports after that), then listens
         /// for input reports until accept() is satisfied or the time is up. Sends nothing.</summary>
+        /// <summary>Diagnostics: result of the feature read and the first few reports a collection sends (id, length, first bytes).</summary>
+        public static string HidSample(HidInfo info, int timeoutMs, byte featureId)
+        {
+            var sb = new StringBuilder();
+            var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (h.IsInvalid) h = CreateFile(info.Path, 0x80000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (h.IsInvalid) return "open failed (error " + Marshal.GetLastWin32Error() + ")";
+            IntPtr ev = CreateEvent(IntPtr.Zero, true, false, null);
+            try
+            {
+                if (featureId != 0 && info.FeatLen > 0)
+                {
+                    var f = new byte[info.FeatLen]; f[0] = featureId;
+                    bool ok = HidD_GetFeature(h, f, f.Length);
+                    sb.Append("feature 0x" + featureId.ToString("X2") + (ok ? " ok" : " failed (" + Marshal.GetLastWin32Error() + ")") + "; ");
+                }
+                var deadline = Environment.TickCount + timeoutMs; int n = 0;
+                while (n < 4)
+                {
+                    int left = deadline - Environment.TickCount; if (left <= 0) break;
+                    var buf = new byte[info.InLen]; ResetEvent(ev);
+                    var ro = new OVERLAPPED { hEvent = ev };
+                    bool rok = ReadFile(h, buf, buf.Length, IntPtr.Zero, ref ro);
+                    if (!rok && Marshal.GetLastWin32Error() != 997) { sb.Append("read error " + Marshal.GetLastWin32Error()); break; }
+                    if (!rok && WaitForSingleObject(ev, (uint)left) != 0) { CancelIo(h); WaitForSingleObject(ev, 50); break; }
+                    int cnt; if (GetOverlappedResult(h, ref ro, out cnt, false) && cnt > 0) { sb.Append("[id " + buf[0].ToString("X2") + " len " + cnt + ": " + BitConverter.ToString(buf, 0, Math.Min(cnt, 14)) + "] "); n++; }
+                }
+                if (n == 0) sb.Append("no input reports");
+            }
+            finally { CloseHandle(ev); h.Close(); }
+            return sb.ToString();
+        }
+
         public static byte[] HidListen(HidInfo info, int timeoutMs, Func<byte[], bool> accept, byte featureId = 0)
         {
             var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
