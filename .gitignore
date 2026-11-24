@@ -1,0 +1,7 @@
+dist/
+obj/
+bin/
+*.log
+*.user
+.vs/
+Thumbs.db
