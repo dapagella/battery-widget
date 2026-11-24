@@ -293,24 +293,36 @@ namespace BatteryWidget
 
         static byte[] Get(Native.HidInfo h, byte target, byte prop)
         {
-            var req = new byte[Math.Max(64, (int)h.OutLen)]; req[0] = 0x02; req[1] = target; req[2] = 0x02; req[3] = prop;
-            byte src = target == 0x08 ? (byte)0x00 : (byte)0x01;
-            string err;
-            var reps = Native.HidExchange(h, req, 450, out err, false, r => r.Length >= 8 && r[0] == 0x01 && r[1] == src && r[2] == 0x02);
-            foreach (var r in reps) if (r.Length >= 8 && r[0] == 0x01 && r[1] == src && r[2] == 0x02) return r;
+            // two framings exist: headsets use numbered report 0x02; mice/keyboards behind a Slipstream dongle use an unnumbered
+            // 64-byte report (report id 0). The reply has the same shape either way: [id, source, 0x02, status, value lo, value hi...]
+            foreach (byte id in new byte[] { 0x02, 0x00 })
+            {
+                var req = new byte[Math.Max(65, (int)h.OutLen)]; req[0] = id; req[1] = target; req[2] = 0x02; req[3] = prop;
+                string err;
+                Func<byte[], bool> ok = r => r.Length >= 8 && (r[0] == 0x01 || r[0] == 0x00) && r[2] == 0x02 && (r[3] == 0x00 || r[3] == 0x05 || r[3] == 0x09);
+                var reps = Native.HidExchange(h, req, 300, out err, false, ok);
+                if (err != null) { Log.W("corsair write(id " + id + ") " + h.Pid.ToString("x4") + " page=" + h.UsagePage.ToString("X") + " err=" + err); continue; }
+                foreach (var r in reps) if (ok(r)) return r;
+            }
             return null;
         }
+
+        readonly Dictionary<string, DateTime> quiet = new Dictionary<string, DateTime>();   // collections that never answer: don't ask again for a while
 
         public List<DeviceInfo> Poll()
         {
             var res = new List<DeviceInfo>();
             try
             {
-                foreach (var h in Native.FindHid(0x1B1C, null).Where(x => x.UsagePage == 0xFF42 && x.OutLen >= 64 && x.InLen >= 64))
+                var all = Native.FindHid(0x1B1C, null);
+                if (Log.Enabled) foreach (var x in all) Log.W("corsair hid " + x.Pid.ToString("x4") + " '" + x.Product + "' page=" + x.UsagePage.ToString("X") + " usage=" + x.Usage + " in=" + x.InLen + " out=" + x.OutLen);
+                foreach (var h in all.Where(x => x.UsagePage >= 0xFF00 && x.UsagePage != 0xFFC5 && x.OutLen >= 64 && x.InLen >= 64))
                 {
+                    DateTime until; if (quiet.TryGetValue(h.Path, out until) && until > DateTime.UtcNow) continue;
+                    bool answered = false;
                     foreach (byte target in new byte[] { 0x09, 0x08 })     // 0x09: device behind a receiver, 0x08: the device itself
                     {
-                        var r = Get(h, target, 0x0F);
+                        var r = Get(h, target, 0x0F); if (r != null) answered = true;
                         if (r == null || r[3] != 0x00) continue;
                         int level = r[4] | (r[5] << 8);
                         if (level <= 0 || level > 1000) continue;
@@ -320,10 +332,12 @@ namespace BatteryWidget
                         bool dongle = up.Contains("RECEIVER") || up.Contains("SLIPSTREAM") || up.Contains("DONGLE");
                         string name = dongle || prod.Length == 0 ? "Corsair wireless device" : prod;
                         Kind k = KindGuess.FromName(prod); if (k == Kind.Other) k = Kind.Mouse;
+                        if (dongle && k == Kind.Mouse) name = "Corsair wireless mouse";
                         Log.W("corsair " + h.Pid.ToString("x4") + " target=" + target + " " + name + " " + level / 10 + "%");
                         res.Add(new DeviceInfo { Key = "corsair:" + h.Pid.ToString("x4") + ":" + target, Name = name, Kind = k, Percent = level / 10, Charging = c != null && c[3] == 0 && c[4] == 1, Connection = dongle ? "2.4 GHz" : "USB", Source = "corsair" });
                         break;
                     }
+                    if (!answered) quiet[h.Path] = DateTime.UtcNow.AddSeconds(60);
                 }
             }
             catch (Exception e) { Log.W("corsair: " + e.Message); return null; }

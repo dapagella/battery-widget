@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.0.2
+- Corsair: the Katar / Slipstream family talks to its dongle with an unnumbered report; the widget now tries both framings and every vendor HID collection (with a back-off so it stays cheap). `--debug` lists the Corsair collections it sees.
+
 ## 1.0.1
 - Fixed: the widget no longer vanishes and reappears when a device connects or disconnects (removal is confirmed before it is applied; Windows device events are handled at once).
 - Fixed: with an auto-hiding taskbar the widget now shows and hides together with the taskbar, without the ~2 s delay.
