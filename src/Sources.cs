@@ -29,6 +29,22 @@ namespace BatteryWidget
     public static class Log
     {
         public static bool Enabled;
+        /// <summary>Always written (no --debug needed): crashes and unexpected errors go to %APPDATA%\BatteryWidget\error.log.</summary>
+        public static void Err(string s)
+        {
+            try
+            {
+                lock (L)
+                {
+                    Directory.CreateDirectory(Config.Dir);
+                    var f = Path.Combine(Config.Dir, "error.log");
+                    if (File.Exists(f) && new FileInfo(f).Length > 200000) File.Delete(f);
+                    File.AppendAllText(f, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ") + s + "\r\n");
+                }
+            }
+            catch { }
+            W(s);
+        }
         static readonly object L = new object();
         public static void W(string s)
         {
@@ -342,18 +358,64 @@ namespace BatteryWidget
             foreach (var s in sources) { var src = s; ThreadPool.QueueUserWorkItem(_ => Update(src)); }
         }
 
-        void Update(ISource s)
+        readonly HashSet<string> confirming = new HashSet<string>();
+
+        // Many devices report a bogus 100 % the moment a charging cable goes in (the charger inflates the reading). Remember the
+        // last real level from before charging and, while the device claims 100 % right after being plugged, show that level
+        // plus an estimate of what has charged since (about 30 %/hour). After 4 h we trust the device again.
+        class ChargeState { public int LastPct = -1; public DateTime LastAt; public DateTime ChargeStart = DateTime.MinValue; }
+        readonly Dictionary<string, ChargeState> chargeStates = new Dictionary<string, ChargeState>();
+        void GuardCharging(DeviceInfo d)
+        {
+            if (d.Percent < 0 || d.Key == null) return;
+            ChargeState st; if (!chargeStates.TryGetValue(d.Key, out st)) chargeStates[d.Key] = st = new ChargeState();
+            var now = DateTime.UtcNow;
+            if (!d.Charging) { st.LastPct = d.Percent; st.LastAt = now; st.ChargeStart = DateTime.MinValue; return; }
+            if (st.ChargeStart == DateTime.MinValue) st.ChargeStart = now;
+            double hours = (now - st.ChargeStart).TotalHours;
+            if (d.Percent >= 99 && st.LastPct >= 0 && st.LastPct <= 95 && hours < 4 && (now - st.LastAt).TotalHours < 48)
+            {
+                d.Percent = (int)Math.Max(st.LastPct, Math.Min(99, st.LastPct + hours * 30));
+                d.Estimated = true;
+            }
+        }
+
+        /// <summary>Re-read everything shortly (used when Windows reports a device arrived/left, so the widget reacts in about a second).</summary>
+        public void RefreshSoon(int delayMs)
+        {
+            var t = new Timer(_ => RefreshNow(), null, delayMs, Timeout.Infinite);
+            lock (timers) timers.Add(t);
+        }
+
+        void Update(ISource s, bool confirm = false)
         {
             List<DeviceInfo> r;
             try { r = s.Poll(); } catch (Exception e) { Log.W(s.Name + " poll crashed: " + e.Message); r = null; }
             bool changed;
             lock (lk)
             {
+                // A device that vanishes from one reading might just be busy re-enumerating (that is exactly what happens
+                // while another device connects). Don't drop it on the first miss: confirm with a second reading two seconds later.
+                List<DeviceInfo> prev; latest.TryGetValue(s.Name, out prev);
+                if (!confirm && r != null && prev != null && prev.Any(p => !r.Any(x => x.Key == p.Key)))
+                {
+                    if (confirming.Add(s.Name))
+                    {
+                        var name = s.Name; var src = s;
+                        var t = new Timer(_ => { try { Update(src, true); } finally { lock (lk) confirming.Remove(name); } }, null, 2000, Timeout.Infinite);
+                        lock (timers) timers.Add(t);
+                    }
+                    // keep what we had, but still pick up devices that appeared / changed level in this reading
+                    var merged = new List<DeviceInfo>(r);
+                    foreach (var p in prev) if (!r.Any(x => x.Key == p.Key)) merged.Add(p);
+                    r = merged;
+                }
                 // null = "could not read this time" (G HUB restarting, receiver busy...): keep the last known
                 // devices for a couple of polls instead of making them blink out; clear after 3 misses in a row.
                 int m; misses.TryGetValue(s.Name, out m);
                 if (r == null) { misses[s.Name] = ++m; if (m < 3) return; r = new List<DeviceInfo>(); }
                 else misses[s.Name] = 0;
+                foreach (var d in r) GuardCharging(d);
                 List<DeviceInfo> old; latest.TryGetValue(s.Name, out old);
                 changed = old == null || old.Count != r.Count;
                 if (!changed) foreach (var x in r) if (!x.SameAs(old.FirstOrDefault(y => y.Key == x.Key))) { changed = true; break; }
@@ -368,7 +430,7 @@ namespace BatteryWidget
 
         // When two sources see the same physical device (e.g. G HUB and direct HID++, or a Bluetooth node), the more
         // specific source wins and the other copy is dropped.
-        static readonly string[] Priority = { "ghub", "gamesir", "hyperx", "headsets", "razer", "hidpp", "bt", "xinput" };
+        static readonly string[] Priority = { "ghub", "gamesir", "ds4", "hyperx", "headsets", "razer", "corsair", "hidpp", "bt", "xinput" };
         static string Norm(string s) { var sb = new System.Text.StringBuilder(); foreach (char c in (s ?? "").ToLowerInvariant()) if (char.IsLetterOrDigit(c)) sb.Append(c); return sb.ToString(); }
         static int Rank(string src) { int i = Array.IndexOf(Priority, src); return i < 0 ? 99 : i; }
 
@@ -383,6 +445,8 @@ namespace BatteryWidget
                     string n = Norm(d.Name);
                     bool dup = kept.Any(k => k.Kind == d.Kind && (k.Source != d.Source || k.Name == d.Name) && n.Length >= 3
                                              && (Norm(k.Name).Contains(n) || n.Contains(Norm(k.Name))));
+                    // a pad read directly (PlayStation) also shows up as a generic "Wireless Controller" Bluetooth node
+                    if (!dup && d.Source == "bt" && d.Kind == Kind.Gamepad && kept.Any(k => k.Kind == Kind.Gamepad && (k.Source == "ds4" || k.Source == "gamesir"))) dup = true;
                     if (!dup) kept.Add(d);
                 }
                 return kept.OrderBy(d => (int)d.Kind).ThenBy(d => d.Name).ToList();

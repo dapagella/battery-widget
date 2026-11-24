@@ -28,6 +28,15 @@ namespace BatteryWidget
         public const uint SWP_NOSIZE = 1, SWP_NOMOVE = 2, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;
         public const int GWL_EXSTYLE = -20, WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x08000000;
 
+        [StructLayout(LayoutKind.Sequential)] struct APPBARDATA { public int cbSize; public IntPtr hWnd; public uint uCallbackMessage, uEdge; public RECT rc; public IntPtr lParam; }
+        [DllImport("shell32.dll")] static extern UIntPtr SHAppBarMessage(uint msg, ref APPBARDATA d);
+        /// <summary>True when "Automatically hide the taskbar" is on.</summary>
+        public static bool TaskbarAutoHide()
+        {
+            try { var d = new APPBARDATA { cbSize = Marshal.SizeOf(typeof(APPBARDATA)) }; return (((long)SHAppBarMessage(4, ref d)) & 1) != 0; }
+            catch { return false; }
+        }
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern uint RegisterWindowMessage(string s);
         [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
@@ -225,6 +234,39 @@ namespace BatteryWidget
             }
             finally { SetupDiDestroyDeviceInfoList(s); }
             return res;
+        }
+
+        /// <summary>Optionally reads a feature report (some pads only start streaming full reports after that), then listens
+        /// for input reports until accept() is satisfied or the time is up. Sends nothing.</summary>
+        public static byte[] HidListen(HidInfo info, int timeoutMs, Func<byte[], bool> accept, byte featureId = 0)
+        {
+            var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (h.IsInvalid) h = CreateFile(info.Path, 0x80000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
+            if (h.IsInvalid) return null;
+            IntPtr ev = CreateEvent(IntPtr.Zero, true, false, null);
+            try
+            {
+                if (featureId != 0 && info.FeatLen > 0) { var f = new byte[info.FeatLen]; f[0] = featureId; HidD_GetFeature(h, f, f.Length); }
+                var deadline = Environment.TickCount + timeoutMs;
+                while (true)
+                {
+                    int left = deadline - Environment.TickCount; if (left <= 0) break;
+                    var buf = new byte[info.InLen];
+                    ResetEvent(ev);
+                    var ro = new OVERLAPPED { hEvent = ev };
+                    bool rok = ReadFile(h, buf, buf.Length, IntPtr.Zero, ref ro);
+                    if (!rok && Marshal.GetLastWin32Error() != 997) break;
+                    if (!rok && WaitForSingleObject(ev, (uint)left) != 0) { CancelIo(h); WaitForSingleObject(ev, 50); break; }
+                    int cnt;
+                    if (GetOverlappedResult(h, ref ro, out cnt, false) && cnt > 0)
+                    {
+                        var r = new byte[cnt]; Array.Copy(buf, r, cnt);
+                        if (accept(r)) return r;
+                    }
+                }
+            }
+            finally { CloseHandle(ev); h.Close(); }
+            return null;
         }
 
         /// <summary>Sends one output report and collects reports for up to timeoutMs. Returns list of input reports.</summary>

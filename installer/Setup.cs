@@ -11,13 +11,13 @@ using Microsoft.Win32;
 //   Setup.exe /uninstall remove it   (also registered in Windows "Installed apps")
 [assembly: AssemblyTitle("Battery Widget Setup")]
 [assembly: AssemblyProduct("Battery Widget")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 
 static class Setup
 {
     const string AppName = "Battery Widget";
-    const string Version = "1.0.0";
+    const string Version = "1.0.1";
     const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\BatteryWidget";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -83,9 +83,21 @@ static class Setup
         }
 
         MakeShortcut();
-        Process.Start(new ProcessStartInfo(ExePath) { WorkingDirectory = InstallDir, UseShellExecute = true });
-        Info(T("Listo. Battery Widget ya está funcionando en la barra de tareas y se iniciará solo con Windows.\n\nSi no ves nada todavía, enciende un dispositivo inalámbrico: solo aparecen los que están conectados.",
-               "All set. Battery Widget is now running on your taskbar and will start with Windows.\n\nIf you don't see anything yet, switch on a wireless device: only connected devices are shown."), false);
+        var proc = Process.Start(new ProcessStartInfo(ExePath) { WorkingDirectory = InstallDir, UseShellExecute = true });
+
+        // don't claim success unless the widget is really alive a few seconds later
+        System.Threading.Thread.Sleep(4000);
+        bool alive = false;
+        try { alive = !proc.HasExited || Process.GetProcessesByName("BatteryWidget").Length > 0; } catch { }
+        if (!alive)
+        {
+            string log = Path.Combine(DataDir, "error.log");
+            Info(T("Se instaló, pero el widget no pudo iniciar.\n\nSi existe este archivo, mándalo a los desarrolladores:\n" + log,
+                   "Installed, but the widget could not start.\n\nIf this file exists, please send it to the developers:\n" + log), true);
+            return 2;
+        }
+        Info(T("Listo. Battery Widget ya está funcionando y se iniciará solo con Windows.\n\nBúscalo a la izquierda del reloj, en la barra de tareas (si tienes dos pantallas, puede estar en la segunda). Solo aparecen los dispositivos inalámbricos que estén conectados; si no ves ninguno, enciende uno.",
+               "All set. Battery Widget is running and will start with Windows.\n\nLook for it just left of the clock on the taskbar (with two monitors it may be on the second one). Only connected wireless devices are shown; if you see none, switch one on."), false);
         return 0;
     }
 

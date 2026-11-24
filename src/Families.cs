@@ -277,3 +277,93 @@ namespace BatteryWidget
         }
     }
 }
+
+namespace BatteryWidget
+{
+    // ========================================================================================
+    //  Corsair "Bragi" protocol: wireless mice (Katar, Dark Core, Slipstream dongle...), keyboards, headsets (Virtuoso, HS80...).
+    //  Every Corsair HID collection on usage page 0xFF42 is asked for property 0x0F (battery, tenths of a percent).
+    //  Based on the open-source HeadsetControl documentation of the protocol.
+    // ========================================================================================
+    public class CorsairBragiSource : ISource
+    {
+        public string Name { get { return "corsair"; } }
+        public int IntervalSec { get { return 30; } }
+        public void Kick() { }
+
+        static byte[] Get(Native.HidInfo h, byte target, byte prop)
+        {
+            var req = new byte[Math.Max(64, (int)h.OutLen)]; req[0] = 0x02; req[1] = target; req[2] = 0x02; req[3] = prop;
+            byte src = target == 0x08 ? (byte)0x00 : (byte)0x01;
+            string err;
+            var reps = Native.HidExchange(h, req, 450, out err, false, r => r.Length >= 8 && r[0] == 0x01 && r[1] == src && r[2] == 0x02);
+            foreach (var r in reps) if (r.Length >= 8 && r[0] == 0x01 && r[1] == src && r[2] == 0x02) return r;
+            return null;
+        }
+
+        public List<DeviceInfo> Poll()
+        {
+            var res = new List<DeviceInfo>();
+            try
+            {
+                foreach (var h in Native.FindHid(0x1B1C, null).Where(x => x.UsagePage == 0xFF42 && x.OutLen >= 64 && x.InLen >= 64))
+                {
+                    foreach (byte target in new byte[] { 0x09, 0x08 })     // 0x09: device behind a receiver, 0x08: the device itself
+                    {
+                        var r = Get(h, target, 0x0F);
+                        if (r == null || r[3] != 0x00) continue;
+                        int level = r[4] | (r[5] << 8);
+                        if (level <= 0 || level > 1000) continue;
+                        var c = Get(h, target, 0x10);
+                        string prod = h.Product ?? "";
+                        string up = prod.ToUpperInvariant();
+                        bool dongle = up.Contains("RECEIVER") || up.Contains("SLIPSTREAM") || up.Contains("DONGLE");
+                        string name = dongle || prod.Length == 0 ? "Corsair wireless device" : prod;
+                        Kind k = KindGuess.FromName(prod); if (k == Kind.Other) k = Kind.Mouse;
+                        Log.W("corsair " + h.Pid.ToString("x4") + " target=" + target + " " + name + " " + level / 10 + "%");
+                        res.Add(new DeviceInfo { Key = "corsair:" + h.Pid.ToString("x4") + ":" + target, Name = name, Kind = k, Percent = level / 10, Charging = c != null && c[3] == 0 && c[4] == 1, Connection = dongle ? "2.4 GHz" : "USB", Source = "corsair" });
+                        break;
+                    }
+                }
+            }
+            catch (Exception e) { Log.W("corsair: " + e.Message); return null; }
+            return res;
+        }
+    }
+
+    // ========================================================================================
+    //  PlayStation 4 controller (DualShock 4) over Bluetooth or USB.
+    //  Over Bluetooth Windows only delivers the short input report; reading feature report 0x02 makes the pad
+    //  send the full report (0x11), which carries the battery in byte 32 (byte 30 of the USB report 0x01).
+    // ========================================================================================
+    public class DualShock4Source : ISource
+    {
+        public string Name { get { return "ds4"; } }
+        public int IntervalSec { get { return 30; } }
+        public void Kick() { }
+
+        public List<DeviceInfo> Poll()
+        {
+            var res = new List<DeviceInfo>();
+            try
+            {
+                var pads = Native.FindHid(0x054C, new ushort[] { 0x05C4, 0x09CC, 0x0BA0 }).Where(x => x.UsagePage == 0x01 && x.Usage == 0x05 && x.InLen >= 10).ToList();
+                int n = 0;
+                foreach (var h in pads)
+                {
+                    int idx = -1;
+                    var r = Native.HidListen(h, 1500, x => (x[0] == 0x11 && x.Length >= 34) || (x[0] == 0x01 && x.Length >= 32 && h.InLen < 70), 0x02);
+                    if (r == null) continue;
+                    idx = r[0] == 0x11 ? 32 : 30;
+                    int b = r[idx], lvl = b & 0x0F; bool cable = (b & 0x10) != 0;
+                    int pct = Math.Min(100, lvl * 100 / (cable ? 11 : 8));
+                    Log.W("ds4 " + h.Pid.ToString("x4") + " report=" + r[0].ToString("X2") + " byte=" + b.ToString("X2") + " -> " + pct + "%");
+                    if (pct <= 0 && !cable) continue;
+                    res.Add(new DeviceInfo { Key = "ds4:" + (n++), Name = "DualShock 4", Kind = Kind.Gamepad, Percent = pct, Charging = cable && lvl < 11, Connection = r[0] == 0x11 ? "Bluetooth" : "USB", Source = "ds4" });
+                }
+            }
+            catch (Exception e) { Log.W("ds4: " + e.Message); return null; }
+            return res;
+        }
+    }
+}

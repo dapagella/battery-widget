@@ -28,7 +28,8 @@ Requires Windows 10/11 (uses the .NET Framework 4.8 that ships with Windows).
 |---|---|---|---|
 | **Logitech** | G / MX / LIGHTSPEED keyboards, mice, headsets | [G HUB](https://www.logitechg.com/innovation/g-hub.html)'s local service; without G HUB, **HID++ 2.0** straight from Unifying / Bolt / LIGHTSPEED receivers | ✅ tested (G915 X, G305) |
 | **HyperX** | Cloud II Wireless (both dongles), Cloud Alpha Wireless, Cloud Flight | USB receiver (HID) | ✅ Cloud II tested · ⚠️ others from public protocols |
-| **Corsair** | VOID / HS-series wireless headsets (USB dongle) | USB receiver (HID) | ⚠️ from public protocols, untested |
+| **Corsair** | VOID / HS-series wireless headsets (USB dongle), wireless mice such as the **Katar** (Slipstream dongle), Virtuoso/HS80 | USB receiver (HID): vendor and "Bragi" protocols | ✅ VOID headset tested by a user · ⚠️ mice from public protocols, untested |
+| **PlayStation** | DualShock 4 over Bluetooth or USB | HID input report | ⚠️ from public protocols, untested |
 | **Razer** | wireless mice, keyboards, headsets with a USB dongle (Viper, DeathAdder, Basilisk, Naga, Cobra, BlackWidow…) | Razer Chroma feature-report protocol, auto-detected (no model list) | ⚠️ from public protocols, untested |
 | **GameSir** | Nova 2 family on the 2.4 GHz dongle | USB dongle (HID) | ✅ tested |
 | **ASUS (ROG), Redragon and any other brand** | anything that connects by **Bluetooth** and reports battery (classic or Bluetooth LE) | Windows' own Bluetooth data | ✅ generic |

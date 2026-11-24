@@ -51,6 +51,9 @@ namespace BatteryWidget
         readonly DeviceHub hub;
         readonly StackPanel host = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         readonly DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        readonly DispatcherTimer fast = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        uint taskbarCreatedMsg;
+        bool autoHideOn, autohideHidden;
         IntPtr hwnd; int lastState = -1, ticks;
         bool fullscreenHidden;
         List<DeviceInfo> shown = new List<DeviceInfo>();
@@ -85,10 +88,15 @@ namespace BatteryWidget
                 // back on top the instant that happens, instead of waiting for the next timer tick.
                 zHook = new Native.WinEventProc((hk, evt, wh, o, ch, th, tm) => Dispatcher.BeginInvoke(new Action(Reassert), DispatcherPriority.Send));
                 Native.HookZOrderEvents(zHook);
+                // device plugged/unplugged, display or taskbar changes: react at once and again a moment later (the taskbar settles after ~1 s)
+                taskbarCreatedMsg = Native.RegisterWindowMessage("TaskbarCreated");
+                var hs = HwndSource.FromHwnd(hwnd); if (hs != null) hs.AddHook(WndProc);
             };
-            timer.Tick += (s, e) => { try { Tick(); } catch (Exception ex) { Log.W("tick: " + ex); } };
+            timer.Tick += (s, e) => { try { Tick(); } catch (Exception ex) { Log.Err("tick: " + ex); } };
             timer.Start();
-            hub.Changed += () => Dispatcher.BeginInvoke(new Action(() => { try { Rebuild(); } catch (Exception ex) { Log.W("rebuild: " + ex); } }));
+            fast.Tick += (s, e) => { try { FastTick(); } catch (Exception ex) { Log.Err("fast: " + ex); } };
+            fast.Start();
+            hub.Changed += () => Dispatcher.BeginInvoke(new Action(() => { try { Rebuild(); } catch (Exception ex) { Log.Err("rebuild: " + ex); } }));
         }
 
         // =====================================================================
@@ -130,7 +138,7 @@ namespace BatteryWidget
         Native.WinEventProc zHook; // kept in a field so the delegate is never garbage-collected
         void Reassert()
         {
-            if (hwnd == IntPtr.Zero || UpdateFullscreen()) return;
+            if (hwnd == IntPtr.Zero || autohideHidden || UpdateFullscreen()) return;
             Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, 0, 0, 0, 0, Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
         }
 
@@ -191,7 +199,7 @@ namespace BatteryWidget
                 }
                 for (int i = 0; i < items.Count; i++) UpdateItem(items[i], shown[i]);
             }
-            host.UpdateLayout();
+            UpdateLayout();
             Reposition(true);
             if (!introPlayed && shown.Count > 0) { introPlayed = true; host.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } }); }
         }
@@ -199,8 +207,8 @@ namespace BatteryWidget
         UIElement EmptyChip()
         {
             double s = Sc(), h = 26 * s;
-            var icon = new System.Windows.Shapes.Path { Data = Geometry.Parse(Icons.For(Kind.Other)), Stroke = B(Theme.WithAlpha(Theme.Neutral, 0xD0)), StrokeThickness = Math.Max(1.0, 16 * s * 1.75 / 24.0), StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Fill = Brushes.Transparent, Width = 16 * s, Height = 16 * s, Stretch = Stretch.Uniform };
-            var b = new Border { Height = h + 6 * s, Padding = new Thickness(11 * s, 0, 11 * s, 0), CornerRadius = Corner(h + 6 * s), Background = B(Theme.WithAlpha(BgColor(), (byte)Math.Min(BgColor().A, (byte)0x99))), Child = icon, VerticalAlignment = VerticalAlignment.Center };
+            var icon = new System.Windows.Shapes.Path { Data = Geometry.Parse(Icons.For(Kind.Other)), Stroke = B(Theme.WithAlpha(Theme.Text, 0xE6)), StrokeThickness = Math.Max(1.0, 16 * s * 1.75 / 24.0), StrokeLineJoin = PenLineJoin.Round, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Fill = Brushes.Transparent, Width = 16 * s, Height = 16 * s, Stretch = Stretch.Uniform };
+            var b = new Border { Height = h + 6 * s, Padding = new Thickness(11 * s, 0, 11 * s, 0), CornerRadius = Corner(h + 6 * s), Background = B(Color.FromArgb(0xCC, 0x2A, 0x2E, 0x38)), BorderBrush = B(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)), BorderThickness = new Thickness(1), Child = icon, VerticalAlignment = VerticalAlignment.Center };
             var tip = MakeTip();
             SetTipContent(tip, Loc.T("Sin dispositivos conectados"), null, Theme.Neutral, Loc.T("Enciende un teclado, mouse o auricular inalámbrico."), null);
             b.ToolTip = tip; SetupTipService(b);
@@ -405,12 +413,45 @@ namespace BatteryWidget
         bool UpdateFullscreen()
         {
             bool full = IsFullscreenOnMyScreen();
-            if (full != fullscreenHidden)
-            {
-                fullscreenHidden = full;
-                Visibility = full ? Visibility.Hidden : Visibility.Visible;
-            }
+            if (full != fullscreenHidden) { fullscreenHidden = full; ApplyVisibility(); }
             return full;
+        }
+
+        void ApplyVisibility() { Visibility = (fullscreenHidden || autohideHidden) ? Visibility.Hidden : Visibility.Visible; }
+        bool Suppressed { get { return fullscreenHidden || autohideHidden; } }
+
+        // ---- quick reactions (cheap): keeps the widget on top and follows an auto-hiding taskbar without a visible delay ----
+        void FastTick()
+        {
+            if (hwnd == IntPtr.Zero) return;
+            bool ah = Native.TaskbarAutoHide();
+            if (ah != autoHideOn)
+            {
+                autoHideOn = ah;
+                fast.Interval = TimeSpan.FromMilliseconds(ah ? 100 : 400);   // an auto-hiding taskbar slides in ~200 ms: watch it closely
+                if (!ah && autohideHidden) { autohideHidden = false; ApplyVisibility(); }
+                lastKey = "";
+            }
+            if (UpdateFullscreen()) return;
+            if (autoHideOn) { Reposition(false); return; }          // also shows/hides with the taskbar
+            Reassert();
+        }
+
+        IntPtr WndProc(IntPtr h, int msg, IntPtr wp, IntPtr lp, ref bool handled)
+        {
+            bool devices = msg == 0x0219;                                              // WM_DEVICECHANGE
+            if (devices || msg == 0x007E || msg == 0x001A || (taskbarCreatedMsg != 0 && (uint)msg == taskbarCreatedMsg)) // display / settings / taskbar restarted
+            {
+                Reassert();
+                foreach (int ms in new[] { 150, 700, 1800 })
+                {
+                    var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                    t.Tick += (s, e) => { t.Stop(); try { lastKey = ""; Reposition(true); Reassert(); } catch { } };
+                    t.Start();
+                }
+                if (devices) hub.RefreshSoon(1200);                                    // new reading right after Windows settles
+            }
+            return IntPtr.Zero;
         }
 
         bool IsFullscreenOnMyScreen()
@@ -446,8 +487,9 @@ namespace BatteryWidget
             while ((h = Native.FindWindowEx(IntPtr.Zero, h, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero)
             {
                 RECT r; if (!Native.GetWindowRect(h, out r)) continue;
-                int cx = (r.Left + r.Right) / 2, cy = (r.Top + r.Bottom) / 2;
-                if (cx >= t.Rect.Left && cx < t.Rect.Right && cy >= t.Rect.Top && cy < t.Rect.Bottom) return h;
+                // match by horizontal position + any vertical overlap: an auto-hidden taskbar sits with only a sliver on the screen
+                int cx = (r.Left + r.Right) / 2;
+                if (cx >= t.Rect.Left && cx < t.Rect.Right && r.Top < t.Rect.Bottom && r.Bottom > t.Rect.Top) return h;
             }
             return IntPtr.Zero;
         }
@@ -463,7 +505,7 @@ namespace BatteryWidget
             {
                 int ccx = (cur.Left + cur.Right) / 2, ccy = (cur.Top + cur.Bottom) / 2;
                 if (ccx < t.Rect.Left || ccx >= t.Rect.Right || ccy < t.Rect.Top || ccy >= t.Rect.Bottom)
-                    Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, t.Rect.Left + 40, t.Rect.Bottom - 80, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | (fullscreenHidden ? 0u : Native.SWP_SHOWWINDOW));
+                    Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, t.Rect.Left + 40, t.Rect.Bottom - 80, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | (Suppressed ? 0u : Native.SWP_SHOWWINDOW));
             }
             uint wdpi = Native.GetDpiForWindow(hwnd);
             double scale = wdpi > 0 ? wdpi / 96.0 : t.Scale; curScale = scale;
@@ -473,7 +515,11 @@ namespace BatteryWidget
                 tb = new RECT { Left = t.Rect.Left, Right = t.Rect.Right, Bottom = t.Rect.Bottom, Top = t.Rect.Bottom - (int)(48 * scale) };
             int tbH = tb.Bottom - tb.Top;
             bool horizontal = (tb.Right - tb.Left) >= tbH;
-            if (horizontal && tbH < (int)(30 * scale)) // auto-hidden taskbar: only a sliver is reported, use a normal-height strip at the screen edge
+            // auto-hide taskbar: the widget belongs to the taskbar, so it shows and hides together with it (no polling delay)
+            bool tbHidden = autoHideOn && tray != IntPtr.Zero && (Math.Min(tb.Bottom, t.Rect.Bottom) - Math.Max(tb.Top, t.Rect.Top)) < tbH * 0.5;
+            if (tbHidden != autohideHidden) { autohideHidden = tbHidden; ApplyVisibility(); }
+            if (tbHidden) return;
+            if (!autoHideOn && horizontal && tbH < (int)(30 * scale)) // taskbar reported as a sliver: use a normal-height strip at the screen edge
             {
                 if (tb.Top > t.Rect.Top + (t.Rect.Bottom - t.Rect.Top) / 2) { tb.Bottom = t.Rect.Bottom; tb.Top = tb.Bottom - (int)(48 * scale); }
                 else { tb.Top = t.Rect.Top; tb.Bottom = tb.Top + (int)(48 * scale); }
@@ -520,7 +566,7 @@ namespace BatteryWidget
             }
             else { x = tb.Left + ((tb.Right - tb.Left) - w) / 2; y = tb.Bottom - hgt - (int)(80 * scale); }
             inReposition = true;
-            try { Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, x, y, w, hgt, Native.SWP_NOACTIVATE | (fullscreenHidden ? 0u : Native.SWP_SHOWWINDOW)); }
+            try { Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, x, y, w, hgt, Native.SWP_NOACTIVATE | (Suppressed ? 0u : Native.SWP_SHOWWINDOW)); }
             finally { inReposition = false; }
         }
 
