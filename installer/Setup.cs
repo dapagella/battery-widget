@@ -11,13 +11,13 @@ using Microsoft.Win32;
 //   Setup.exe /uninstall remove it   (also registered in Windows "Installed apps")
 [assembly: AssemblyTitle("Battery Widget Setup")]
 [assembly: AssemblyProduct("Battery Widget")]
-[assembly: AssemblyVersion("1.0.4.0")]
-[assembly: AssemblyFileVersion("1.0.4.0")]
+[assembly: AssemblyVersion("1.0.5.0")]
+[assembly: AssemblyFileVersion("1.0.5.0")]
 
 static class Setup
 {
     const string AppName = "Battery Widget";
-    const string Version = "1.0.4";
+    const string Version = "1.0.5";
     const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\BatteryWidget";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
@@ -67,6 +67,9 @@ static class Setup
 
         // start with Windows (current user)
         using (var k = Registry.CurrentUser.CreateSubKey(RunKey)) k.SetValue("BatteryWidget", "\"" + ExePath + "\"");
+        // plus a Task Scheduler logon task: this is what makes it start dependably. If Windows needs permission to create it,
+        // it shows its standard prompt (UAC); the Run key above stays as a second line of defence either way.
+        bool task = BatteryWidget.AutoStartTask.Create(ExePath, !Silent);
 
         // "Installed apps" entry
         using (var k = Registry.CurrentUser.CreateSubKey(UninstallKey))
@@ -92,11 +95,11 @@ static class Setup
         if (!alive)
         {
             string log = Path.Combine(DataDir, "error.log");
-            Info(T("Se instalÃ³, pero el widget no pudo iniciar.\n\nSi existe este archivo, mÃ¡ndalo a los desarrolladores:\n" + log,
+            Info(T("Se instaló, pero el widget no pudo iniciar.\n\nSi existe este archivo, mándalo a los desarrolladores:\n" + log,
                    "Installed, but the widget could not start.\n\nIf this file exists, please send it to the developers:\n" + log), true);
             return 2;
         }
-        Info(T("Listo. Battery Widget ya estÃ¡ funcionando y se iniciarÃ¡ solo con Windows.\n\nBÃºscalo a la izquierda del reloj, en la barra de tareas (si tienes dos pantallas, puede estar en la segunda). Solo aparecen los dispositivos inalÃ¡mbricos que estÃ©n conectados; si no ves ninguno, enciende uno.",
+        Info(T("Listo. Battery Widget ya está funcionando y se iniciará solo con Windows.\n\nBúscalo a la izquierda del reloj, en la barra de tareas (si tienes dos pantallas, puede estar en la segunda). Solo aparecen los dispositivos inalámbricos que estén conectados; si no ves ninguno, enciende uno.",
                "All set. Battery Widget is running and will start with Windows.\n\nLook for it just left of the clock on the taskbar (with two monitors it may be on the second one). Only connected wireless devices are shown; if you see none, switch one on."), false);
         return 0;
     }
@@ -118,17 +121,18 @@ static class Setup
     {
         if (!Silent)
         {
-            var r = MessageBox.Show(T("Â¿Quitar Battery Widget de este equipo?", "Remove Battery Widget from this computer?"), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            var r = MessageBox.Show(T("¿Quitar Battery Widget de este equipo?", "Remove Battery Widget from this computer?"), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return 0;
         }
         StopRunning();
         try { using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true)) { if (k != null) k.DeleteValue("BatteryWidget", false); } } catch { }
+        try { BatteryWidget.AutoStartTask.Delete(!Silent); } catch { }
         try { Registry.CurrentUser.DeleteSubKeyTree(UninstallKey, false); } catch { }
         try { if (File.Exists(StartMenuLink)) File.Delete(StartMenuLink); } catch { }
 
         bool wipeData = false;   // a silent uninstall keeps settings (safe for upgrades); the interactive one asks
         if (!Silent && Directory.Exists(DataDir))
-            wipeData = MessageBox.Show(T("Â¿Borrar tambiÃ©n tus ajustes?", "Also delete your settings?"), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+            wipeData = MessageBox.Show(T("¿Borrar también tus ajustes?", "Also delete your settings?"), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
         if (wipeData) { try { Directory.Delete(DataDir, true); } catch { } }
 
         try { if (File.Exists(ExePath)) File.Delete(ExePath); } catch { }
@@ -140,7 +144,7 @@ static class Setup
             Process.Start(new ProcessStartInfo("cmd.exe", cmd) { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden });
         }
         else { try { Directory.Delete(InstallDir, true); } catch { } }
-        Info(T("Battery Widget se quitÃ³ correctamente.", "Battery Widget was removed."), false);
+        Info(T("Battery Widget se quitó correctamente.", "Battery Widget was removed."), false);
         return 0;
     }
 }

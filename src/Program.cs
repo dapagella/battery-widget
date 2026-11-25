@@ -32,8 +32,8 @@ namespace BatteryWidget
                 Log.Enabled = cfg.Debug || debugFlag;
                 Log.W("start " + Environment.OSVersion.VersionString + " " + (Environment.Is64BitProcess ? "x64" : "x86"));
                 Native.EnableEcoMode();
-                if (!cfg.AutoStartInitDone) { Config.SetAutoStart(true); cfg.AutoStartInitDone = true; cfg.Save(); }
-                else if (Config.GetAutoStart()) Config.SetAutoStart(true); // keeps the registered path current if the exe moved
+                if (!cfg.AutoStartInitDone && !Config.LoadFailed) { cfg.AutoStartInitDone = true; cfg.Save(); System.Threading.ThreadPool.QueueUserWorkItem(_ => Config.SetAutoStart(true)); }   // first run: turn "start with Windows" on
+                else System.Threading.ThreadPool.QueueUserWorkItem(_ => { try { if (Config.GetAutoStart()) Config.SetAutoStart(true); } catch { } });   // self-heal: keeps the task and path current
 
                 var hub = new DeviceHub();
                 hub.Add(new GHubSource());
@@ -56,6 +56,7 @@ namespace BatteryWidget
                 hub.Start();
                 foreach (var a in args) if (a.StartsWith("--shots=")) win.RunSelfTest(a.Substring(8));
                 app.Run();
+                if (!Config.LoadFailed) cfg.Save();
                 Estimator.Instance.Flush();
             }
         }

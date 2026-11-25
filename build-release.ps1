@@ -18,7 +18,7 @@ if ($LASTEXITCODE -ne 0) { throw "widget build failed" }
 $setup = "$out\BatteryWidget-Setup.exe"
 $refs = @("$fw\System.dll", "$fw\System.Windows.Forms.dll", "$fw\System.Core.dll", "$fw\Microsoft.CSharp.dll")
 $csc = @('-nologo', '-target:winexe', '-optimize+', "-out:$setup", "-win32icon:$here\assets\icon.ico",
-         "-win32manifest:$here\installer\setup.manifest", "-resource:$out\BatteryWidget.exe,BatteryWidget.exe") + ($refs | % { "-r:$_" }) + "$here\installer\Setup.cs"
+         "-win32manifest:$here\installer\setup.manifest", "-resource:$out\BatteryWidget.exe,BatteryWidget.exe") + ($refs | % { "-r:$_" }) + "$here\installer\Setup.cs" + "$here\src\AutoStartTask.cs"
 & "$fw\csc.exe" @csc
 if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
 

@@ -1,4 +1,9 @@
-﻿# Changelog
+# Changelog
+
+## 1.0.5
+- Fixed: start with Windows. It now registers a Task Scheduler logon task (the installer asks Windows for permission when it is needed) in addition to the Run key, and re-creates it on every launch if it went missing.
+- Fixed: your look (style, background, shape, size, position) is always kept: settings are saved atomically with a backup copy, a locked or damaged file falls back to the backup, and a failed read can never overwrite your settings with defaults.
+- Fixed: installer messages showed garbled accents in 1.0.4.
 
 ## 1.0.4 (1.0.3 was published by mistake with the 1.0.2 code)
 - New: right-click -> "Save diagnostics" writes `%APPDATA%\BatteryWidget\diagnostic.txt` (Bluetooth devices, USB/HID collections of the supported brands, what Corsair and PlayStation devices answer). Attach it to an issue to get a device supported.

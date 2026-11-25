@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace BatteryWidget
@@ -75,7 +76,9 @@ namespace BatteryWidget
                 ws = new ClientWebSocket();
                 ws.Options.AddSubProtocol("json");
                 ws.Options.SetRequestHeader("Origin", "file://");
-                if (!ws.ConnectAsync(new Uri("ws://127.0.0.1:9010"), CancellationToken.None).Wait(3000)) return false;
+                var connect = ws.ConnectAsync(new Uri("ws://127.0.0.1:9010"), CancellationToken.None);
+                connect.ContinueWith(t => { var ignored = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);   // G HUB not running is normal: don't log it as an error
+                if (!connect.Wait(3000)) return false;
                 Recv(1500); // hello
                 return ws.State == WebSocketState.Open;
             }
