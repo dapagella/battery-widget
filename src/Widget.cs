@@ -177,10 +177,15 @@ namespace BatteryWidget
             fast.Tick += (s, e) => { try { FastTick(); } catch (Exception ex) { Log.Err("fast: " + ex); } };
             fast.Start();
             toaster = new Toaster(this);
-            alerts = new AlertEngine(cfg, toaster);
+            alerts = new AlertEngine(cfg, t => toaster.Show(t));
+            Action checkAlerts = () => { try { alerts.Process(hub.Snapshot().Where(d => !cfg.Hidden.Contains(d.Key))); } catch (Exception ex) { Log.Err("alerts: " + ex); } };
+            // also look every 15 s: an alert needs the same reading to hold across two looks, and a steady value produces no "changed" event
+            var alertTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            alertTimer.Tick += (s, e) => checkAlerts();
+            alertTimer.Start();
             hub.Changed += () => Dispatcher.BeginInvoke(new Action(() =>
             {
-                try { alerts.Process(hub.Snapshot().Where(d => !cfg.Hidden.Contains(d.Key))); } catch (Exception ex) { Log.Err("alerts: " + ex); }
+                checkAlerts();
                 try { Rebuild(); } catch (Exception ex) { Log.Err("rebuild: " + ex); }
             }));
             StartUpdateChecks();

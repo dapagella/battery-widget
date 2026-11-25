@@ -22,6 +22,10 @@ jobs:
           if ($env:GITHUB_REF -like 'refs/tags/v*') { $v = $env:GITHUB_REF_NAME.TrimStart('v') } else { $v = '0.0.0' }
           "version=$v" >> $env:GITHUB_OUTPUT
 
+      - name: Run tests
+        shell: pwsh
+        run: ./tests/run-tests.ps1
+
       - name: Build widget + installer
         shell: pwsh
         run: ./build-release.ps1 -Version ${{ steps.ver.outputs.version }}

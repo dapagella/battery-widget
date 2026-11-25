@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.1
+- Notifications are now stricter: a reading must hold for 30 s before it is announced (one glitchy reading can't fire an alert); estimates and coarse readings (4-step gamepads) never trigger; "fully charged" only counts a real climb to 100 %. 19 scripted scenarios in `tests/` run on every build.
+
 ## 1.1.0
 - New: notifications. Low battery at 20 % and 10 %, and once when a charging device reaches 100 %. Cards rise from the widget, never take focus and wait while a full-screen app is running. Switch them (and the sound) off in right-click -> Alerts.
 - New: time left. The tooltip shows an estimate such as "~ 14 h left", learned from the device's own battery history (kept locally for two weeks).

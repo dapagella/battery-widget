@@ -7,6 +7,8 @@
 .\dist\BatteryWidget.exe --debug --always-visible   # log: %APPDATA%\BatteryWidget\debug.log
 ```
 
+Run `.	estsun-tests.ps1` before sending a change to the notification rules: it replays scripted battery readings (glitches, charging, coarse pads, estimates) through the real code.
+
 `--shots=<folder>` renders the real UI (widget, menus, tooltip, size popover) to PNG files, handy for reviewing visual changes.
 
 ## Adding a device
