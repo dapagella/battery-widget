@@ -55,9 +55,11 @@ namespace BatteryWidget
                 win.Show();
                 hub.Start();
                 foreach (var a in args) if (a.StartsWith("--shots=")) win.RunSelfTest(a.Substring(8));
+                if (Array.IndexOf(args, "--demo-alerts") >= 0) win.DemoAlerts();
                 app.Run();
                 if (!Config.LoadFailed) cfg.Save();
                 Estimator.Instance.Flush();
+                History.Instance.Flush();
             }
         }
     }

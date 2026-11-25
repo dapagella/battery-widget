@@ -6,7 +6,9 @@ Keyboard, mouse, headset, gamepad, Bluetooth gear — each one shown on its own,
 ![Battery Widget on the taskbar](assets/screenshots/widget.png)
 
 - **Automatic.** Detects your devices by itself; nothing to configure. Appears when a device connects, disappears when it doesn't.
-- **Quiet.** ~12 MB of RAM, ~0% CPU, no network access. Everything is read locally.
+- **Quiet.** ~12 MB of RAM, ~0% CPU. Your devices are read locally; the only network use is one small daily check for a new version (can be turned off).
+- **Tells you what matters.** A notification when a device drops to **20 %** and **10 %**, one when it reaches **100 %** while charging, and "≈ 14 h left" in the tooltip based on how your battery really behaves.
+- **One-click updates.** When a new version is published you get a notification with an *Update* button.
 - **Starts with Windows** (turned on by the installer).
 - **Tidy.** Hover for details, drag to move it along the taskbar, double-click to resize, right-click for styles. It never covers your taskbar buttons, follows a second monitor if you have one, and hides while a game runs full screen.
 - English and Spanish (follows your Windows language).
@@ -59,7 +61,11 @@ Settings live in `%APPDATA%\BatteryWidget\config.json`.
 
 ## Privacy
 
-The widget makes **no network connections**. It talks to Logitech G HUB on `127.0.0.1`, to USB receivers over HID, and to Windows. It collects and sends nothing.
+Your devices are read **locally**: Logitech G HUB on `127.0.0.1`, USB receivers over HID, and Windows. Nothing about you or your devices is ever sent anywhere.
+
+The only network request is a **once-a-day check of this project's GitHub releases** (to offer updates). It sends no data besides what any web request carries. Turn it off in right-click → *Updates → Check automatically*. When you press *Update*, the installer is downloaded from this repository's release page over HTTPS and verified against the SHA-256 that GitHub publishes for the file before it runs.
+
+The battery history behind the "time left" estimate stays on your PC (`%APPDATA%\BatteryWidget\history.json`, two weeks, a few KB). Delete the file any time.
 
 ## Build from source
 

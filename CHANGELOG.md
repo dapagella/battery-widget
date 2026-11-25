@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+- New: notifications. Low battery at 20 % and 10 %, and once when a charging device reaches 100 %. Cards rise from the widget, never take focus and wait while a full-screen app is running. Switch them (and the sound) off in right-click -> Alerts.
+- New: time left. The tooltip shows an estimate such as "~ 14 h left", learned from the device's own battery history (kept locally for two weeks).
+- New: updates. One daily check of the GitHub releases; a notification offers a one-click update (checksum verified). Right-click -> Updates to check now or turn it off.
+
 ## 1.0.5
 - Fixed: start with Windows. It now registers a Task Scheduler logon task (the installer asks Windows for permission when it is needed) in addition to the Run key, and re-creates it on every launch if it went missing.
 - Fixed: your look (style, background, shape, size, position) is always kept: settings are saved atomically with a backup copy, a locked or damaged file falls back to the backup, and a failed read can never overwrite your settings with defaults.

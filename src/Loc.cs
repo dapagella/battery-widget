@@ -28,7 +28,14 @@ namespace BatteryWidget
             { "Sin dispositivos conectados", "No devices connected" },
             { "Enciende un teclado, mouse o auricular inalámbrico.", "Turn on a wireless keyboard, mouse or headset." },
             { "Cargando", "Charging" }, { "Conectado", "Connected" }, { "Estimado", "Estimated" }, { "estimado", "estimated" },
-            { "Inalámbrico", "Wireless" }, { "Control inalámbrico", "Wireless controller" }
+            { "Inalámbrico", "Wireless" }, { "Control inalámbrico", "Wireless controller" },
+            { "Batería baja", "Low battery" }, { "Batería muy baja", "Very low battery" }, { "Conéctalo a cargar.", "Plug it in to charge." },
+            { "Cargado al 100 %.", "Fully charged." }, { "Ya puedes desenchufarlo.", "You can unplug it." },
+            { "Hay una versión nueva", "A new version is available" }, { "Actualizar", "Update" },
+            { "Se instala en unos segundos y el widget se reinicia solo.", "It installs in a few seconds and the widget restarts by itself." },
+            { "No se pudo actualizar", "The update failed" }, { "Estás al día", "You are up to date" }, { "No se pudo buscar actualizaciones", "Could not check for updates" },
+            { "restantes", "left" }, { "días", "days" }, { "Avisos", "Alerts" }, { "Batería baja (20 % y 10 %)", "Low battery (20 % and 10 %)" },
+            { "Cargada al 100 %", "Fully charged" }, { "Sonido", "Sound" }, { "Actualizaciones", "Updates" }, { "Buscar automáticamente", "Check automatically" }, { "Buscar ahora", "Check now" }
         };
 
         public static string T(string es)

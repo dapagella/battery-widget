@@ -48,6 +48,86 @@ namespace BatteryWidget
     public class WidgetWindow : Window
     {
         readonly Config cfg;
+        readonly Toaster toaster;
+        readonly AlertEngine alerts;
+        Updater.Release pendingUpdate;
+        DispatcherTimer updateTimer;
+
+        // used by the notification cards
+        public IntPtr Handle { get { return hwnd; } }
+        public double CurrentScale { get { return curScale; } }
+        public bool IsSuppressed { get { return Suppressed; } }
+
+        // =====================================================================
+        //  Updates: one quiet check a day; a notification offers a one-click update
+        // =====================================================================
+        void StartUpdateChecks()
+        {
+            updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(45) };   // first look shortly after start, then daily
+            updateTimer.Tick += (s, e) => { updateTimer.Interval = TimeSpan.FromHours(24); if (cfg.CheckUpdates) CheckForUpdates(false); };
+            updateTimer.Start();
+        }
+
+        /// <summary>--demo-alerts: shows one of each notification (used to review their look).</summary>
+        public void DemoAlerts()
+        {
+            var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            t.Tick += (s, e) =>
+            {
+                t.Stop();
+                toaster.Show(new ToastItem { Title = "G915 X LIGHTSPEED TKL", Body = Loc.T("Batería baja") + ": 18 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Warn, Kind = Kind.Keyboard, Seconds = 4 });
+                toaster.Show(new ToastItem { Title = "HyperX Cloud II Wireless", Body = Loc.T("Batería muy baja") + ": 8 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Bad, Kind = Kind.Headset, Seconds = 4 });
+                toaster.Show(new ToastItem { Title = "G305", Body = Loc.T("Cargado al 100 %.") + " " + Loc.T("Ya puedes desenchufarlo."), Accent = Theme.Good, Kind = Kind.Mouse, Seconds = 4 });
+                toaster.Show(new ToastItem { Title = Loc.T("Hay una versión nueva") + " (1.2.0)", Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."), Button = Loc.T("Actualizar"), OnButton = () => { }, Accent = Theme.Good, Kind = Kind.Other, Seconds = 5 });
+            };
+            t.Start();
+        }
+
+        void CheckForUpdates(bool manual)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    Version latest; var r = Updater.CheckNow(out latest);
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (r != null) OfferUpdate(r, manual);
+                        else if (manual) toaster.Show(new ToastItem { Title = "Battery Widget", Body = Loc.T("Estás al día") + " (" + Updater.Current.ToString(3) + ")", Accent = Theme.Good, Kind = Kind.Other, Seconds = 6 });
+                    }));
+                }
+                catch (Exception e)
+                {
+                    Log.W("update check: " + e.Message);
+                    if (manual) Dispatcher.BeginInvoke(new Action(() => toaster.Show(new ToastItem { Title = "Battery Widget", Body = Loc.T("No se pudo buscar actualizaciones"), Accent = Theme.Warn, Kind = Kind.Other, Seconds = 7 })));
+                }
+            });
+        }
+
+        void OfferUpdate(Updater.Release r, bool force)
+        {
+            if (!force && pendingUpdate != null && pendingUpdate.Version == r.Version) return;   // already offered this session
+            pendingUpdate = r;
+            toaster.Show(new ToastItem
+            {
+                Title = Loc.T("Hay una versión nueva") + " (" + r.Version.ToString(3) + ")",
+                Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."),
+                Button = Loc.T("Actualizar"), OnButton = () => ApplyUpdate(r), Accent = Theme.Good, Kind = Kind.Other, Seconds = 25
+            });
+        }
+
+        void ApplyUpdate(Updater.Release r)
+        {
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { Updater.Apply(r); }
+                catch (Exception e)
+                {
+                    Log.Err("update failed: " + e.Message);
+                    Dispatcher.BeginInvoke(new Action(() => toaster.Show(new ToastItem { Title = "Battery Widget", Body = Loc.T("No se pudo actualizar"), Accent = Theme.Bad, Kind = Kind.Other, Seconds = 8 })));
+                }
+            });
+        }
         readonly DeviceHub hub;
         readonly StackPanel host = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         readonly DispatcherTimer timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -96,7 +176,14 @@ namespace BatteryWidget
             timer.Start();
             fast.Tick += (s, e) => { try { FastTick(); } catch (Exception ex) { Log.Err("fast: " + ex); } };
             fast.Start();
-            hub.Changed += () => Dispatcher.BeginInvoke(new Action(() => { try { Rebuild(); } catch (Exception ex) { Log.Err("rebuild: " + ex); } }));
+            toaster = new Toaster(this);
+            alerts = new AlertEngine(cfg, toaster);
+            hub.Changed += () => Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { alerts.Process(hub.Snapshot().Where(d => !cfg.Hidden.Contains(d.Key))); } catch (Exception ex) { Log.Err("alerts: " + ex); }
+                try { Rebuild(); } catch (Exception ex) { Log.Err("rebuild: " + ex); }
+            }));
+            StartUpdateChecks();
         }
 
         // =====================================================================
@@ -312,7 +399,8 @@ namespace BatteryWidget
                 if (d.Percent >= 0) { v.RingArc = Arc(v.RingHost.Width, d.Percent, lc, 2.2 * Sc()); v.RingHost.Children.Insert(1, v.RingArc); }
             }
             string status = Loc.T(d.Charging ? "Cargando" : "Conectado"); string conn = Loc.T(d.Connection);
-            SetTipContent(v.Tip, d.Name, d.Percent >= 0 ? d.Percent + "%" : "--", lc, status, d.Estimated ? (string.IsNullOrEmpty(conn) ? Loc.T("Estimado") : conn + ", " + Loc.T("estimado")) : conn);
+            SetTipContent(v.Tip, d.Name, d.Percent >= 0 ? d.Percent + "%" : "--", lc, status, d.Estimated ? (string.IsNullOrEmpty(conn) ? Loc.T("Estimado") : conn + ", " + Loc.T("estimado")) : conn,
+                d.Estimated ? null : History.Instance.RemainingText(d.Key, d.Percent, d.Charging));
         }
 
         UIElement Arc(double size, int pct, Color c, double thick)
@@ -344,7 +432,7 @@ namespace BatteryWidget
             ToolTipService.SetPlacement(o, PlacementMode.Top);
         }
 
-        void SetTipContent(ToolTip tip, string title, string pct, Color pctColor, string line1, string line2)
+        void SetTipContent(ToolTip tip, string title, string pct, Color pctColor, string line1, string line2, string line3 = null)
         {
             var g = new Grid();
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -364,6 +452,12 @@ namespace BatteryWidget
             if (!string.IsNullOrEmpty(line1)) st.Children.Add(new TextBlock { Text = line1, Foreground = B(Theme.Text), FontFamily = font, FontSize = 12 });
             if (!string.IsNullOrEmpty(line2)) st.Children.Add(new TextBlock { Text = line2, Foreground = B(Theme.TextDim), FontFamily = font, FontSize = 11.5, Margin = new Thickness(0, 1, 0, 0) });
             Grid.SetRow(st, 1); Grid.SetColumn(st, col); Grid.SetColumnSpan(st, 2 - col); g.Children.Add(st);
+            if (!string.IsNullOrEmpty(line3))      // e.g. "≈ 14 h left": its own row so it never crowds the status lines
+            {
+                g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var r = new TextBlock { Text = line3, Foreground = B(Theme.Text), FontFamily = font, FontSize = 12, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 0) };
+                Grid.SetRow(r, 2); Grid.SetColumnSpan(r, 2); g.Children.Add(r);
+            }
             tip.Content = g;
         }
 
@@ -734,6 +828,20 @@ namespace BatteryWidget
                 est.Items.Add(new MenuItem { Header = Loc.T("Autonomía aprendida") + ": " + Estimator.Instance.LifeHours.ToString("0.0", CultureInfo.InvariantCulture) + " h", Style = Theme.MenuItemStyle, IsEnabled = false });
                 m.Items.Add(est);
             }
+
+            var al = Mi("Avisos");
+            al.Items.Add(Radio("Batería baja (20 % y 10 %)", cfg.AlertLow, () => cfg.AlertLow = !cfg.AlertLow));
+            al.Items.Add(Radio("Cargada al 100 %", cfg.AlertFull, () => cfg.AlertFull = !cfg.AlertFull));
+            al.Items.Add(Sep());
+            al.Items.Add(Radio("Sonido", cfg.AlertSound, () => cfg.AlertSound = !cfg.AlertSound));
+            m.Items.Add(al);
+
+            var up = Mi("Actualizaciones");
+            up.Items.Add(Radio("Buscar automáticamente", cfg.CheckUpdates, () => cfg.CheckUpdates = !cfg.CheckUpdates));
+            var chk = Mi("Buscar ahora"); chk.Click += (s, e) => CheckForUpdates(true); up.Items.Add(chk);
+            up.Items.Add(Sep());
+            up.Items.Add(new MenuItem { Header = "v" + Updater.Current.ToString(3), Style = Theme.MenuItemStyle, IsEnabled = false });
+            m.Items.Add(up);
 
             var mon = Mi("Pantalla");
             foreach (var p in new[] { new[] { "auto", "Automática" }, new[] { "primary", "Principal" }, new[] { "secondary", "Secundaria" } })

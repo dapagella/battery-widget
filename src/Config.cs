@@ -29,6 +29,10 @@ namespace BatteryWidget
         public string GamepadName = "GameSir controller";
         public bool Debug = false;
         public bool AutoStartInitDone = false;  // first run turns "start with Windows" on once; the menu can switch it off afterwards
+        public bool AlertLow = true;            // notify at 20 % and 10 %
+        public bool AlertFull = true;           // notify once when a charging device reaches 100 %
+        public bool AlertSound = true;
+        public bool CheckUpdates = true;        // one small request a day to this project's GitHub releases
 
         static string ReadWithRetry(string path)
         {
