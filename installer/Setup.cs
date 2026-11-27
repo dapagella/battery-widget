@@ -11,13 +11,13 @@ using Microsoft.Win32;
 //   Setup.exe /uninstall remove it   (also registered in Windows "Installed apps")
 [assembly: AssemblyTitle("Battery Widget Setup")]
 [assembly: AssemblyProduct("Battery Widget")]
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
+[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyFileVersion("1.2.2.0")]
 
 static class Setup
 {
     const string AppName = "Battery Widget";
-    const string Version = "1.2.1";
+    const string Version = "1.2.2";
     const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\BatteryWidget";
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 

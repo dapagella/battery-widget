@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.2
+- Fixed: a Bluetooth device (gamepad, headset...) kept showing its battery for about two minutes after you switched Bluetooth off or it disconnected. Bluetooth and XInput devices now disappear as soon as Windows reports them gone; only USB receivers keep the short grace period that stops them blinking.
+
 ## 1.2.1
 - Fixed: devices that are on and connected sometimes vanished for a moment. A device is now kept on screen with its last reading until it has been missing for 90 s or more, so a missed poll can no longer make it blink out.
 - Fixed: DualShock 4 over Bluetooth was never found (only USB). Windows names Bluetooth HID paths differently (`vid&0002054c`); the matcher now understands both. Tests cover both path forms.

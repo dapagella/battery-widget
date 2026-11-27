@@ -421,7 +421,9 @@ namespace BatteryWidget
             {
                 if (r != null)
                 {
-                    var now = DateTime.UtcNow; double hold = Math.Max(90, 3 * s.IntervalSec + 15);
+                    var now = DateTime.UtcNow; double hold = Math.Max(60, 2 * s.IntervalSec + 10);
+                    // Bluetooth / XInput report a disconnect as it happens, so a missing device there really is gone: no grace period
+                    if (s.Name == "ds4" || s.Name == "bt" || s.Name == "ble" || s.Name == "xinput") hold = 0;
                     foreach (var d in r) lastSeen[d.Key] = now;
                     List<DeviceInfo> prev; latest.TryGetValue(s.Name, out prev);
                     if (prev != null)

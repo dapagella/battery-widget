@@ -78,7 +78,7 @@ namespace BatteryWidget
                 toaster.Show(new ToastItem { Title = "G915 X LIGHTSPEED TKL", Body = Loc.T("Batería baja") + ": 18 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Warn, Kind = Kind.Keyboard, Seconds = 4 });
                 toaster.Show(new ToastItem { Title = "HyperX Cloud II Wireless", Body = Loc.T("Batería muy baja") + ": 8 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Bad, Kind = Kind.Headset, Seconds = 4 });
                 toaster.Show(new ToastItem { Title = "G305", Body = Loc.T("Cargado al 100 %.") + " " + Loc.T("Ya puedes desenchufarlo."), Accent = Theme.Good, Kind = Kind.Mouse, Seconds = 4 });
-                toaster.Show(new ToastItem { Title = Loc.T("Hay una versión nueva") + " (1.2.1)", Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."), Button = Loc.T("Actualizar"), OnButton = () => { }, Accent = Theme.Good, Kind = Kind.Other, Seconds = 5 });
+                toaster.Show(new ToastItem { Title = Loc.T("Hay una versión nueva") + " (1.2.2)", Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."), Button = Loc.T("Actualizar"), OnButton = () => { }, Accent = Theme.Good, Kind = Kind.Other, Seconds = 5 });
             };
             t.Start();
         }
