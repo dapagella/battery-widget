@@ -380,8 +380,6 @@ namespace BatteryWidget
             foreach (var s in sources) { var src = s; ThreadPool.QueueUserWorkItem(_ => Update(src)); }
         }
 
-        readonly HashSet<string> confirming = new HashSet<string>();
-
         // Many devices report a bogus 100 % the moment a charging cable goes in (the charger inflates the reading). Remember the
         // last real level from before charging and, while the device claims 100 % right after being plugged, show that level
         // plus an estimate of what has charged since (about 30 %/hour). After 4 h we trust the device again.
@@ -409,28 +407,29 @@ namespace BatteryWidget
             lock (timers) timers.Add(t);
         }
 
-        void Update(ISource s, bool confirm = false)
+        // A device that is on and connected can still miss a reading now and then (a receiver busy with another program, USB
+        // re-enumerating while something else connects, G HUB restarting). So a device is only dropped once it has gone unseen for
+        // more than HoldSeconds of real time; extra "refresh now" readings can't shorten that.
+        readonly Dictionary<string, DateTime> lastSeen = new Dictionary<string, DateTime>();
+
+        void Update(ISource s)
         {
             List<DeviceInfo> r;
             try { r = s.Poll(); } catch (Exception e) { Log.W(s.Name + " poll crashed: " + e.Message); r = null; }
             bool changed;
             lock (lk)
             {
-                // A device that vanishes from one reading might just be busy re-enumerating (that is exactly what happens
-                // while another device connects). Don't drop it on the first miss: confirm with a second reading two seconds later.
-                List<DeviceInfo> prev; latest.TryGetValue(s.Name, out prev);
-                if (!confirm && r != null && prev != null && prev.Any(p => !r.Any(x => x.Key == p.Key)))
+                if (r != null)
                 {
-                    if (confirming.Add(s.Name))
-                    {
-                        var name = s.Name; var src = s;
-                        var t = new Timer(_ => { try { Update(src, true); } finally { lock (lk) confirming.Remove(name); } }, null, 2000, Timeout.Infinite);
-                        lock (timers) timers.Add(t);
-                    }
-                    // keep what we had, but still pick up devices that appeared / changed level in this reading
-                    var merged = new List<DeviceInfo>(r);
-                    foreach (var p in prev) if (!r.Any(x => x.Key == p.Key)) merged.Add(p);
-                    r = merged;
+                    var now = DateTime.UtcNow; double hold = Math.Max(90, 3 * s.IntervalSec + 15);
+                    foreach (var d in r) lastSeen[d.Key] = now;
+                    List<DeviceInfo> prev; latest.TryGetValue(s.Name, out prev);
+                    if (prev != null)
+                        foreach (var p in prev)
+                        {
+                            DateTime seen; if (!lastSeen.TryGetValue(p.Key, out seen)) lastSeen[p.Key] = seen = now;
+                            if (!r.Any(x => x.Key == p.Key) && (now - seen).TotalSeconds < hold) r.Add(p);    // keep showing it with its last reading
+                        }
                 }
                 // null = "could not read this time" (G HUB restarting, receiver busy...): keep the last known
                 // devices for a couple of polls instead of making them blink out; clear after 3 misses in a row.

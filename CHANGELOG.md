@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+- Fixed: devices that are on and connected sometimes vanished for a moment. A device is now kept on screen with its last reading until it has been missing for 90 s or more, so a missed poll can no longer make it blink out.
+- Fixed: DualShock 4 over Bluetooth was never found (only USB). Windows names Bluetooth HID paths differently (`vid&0002054c`); the matcher now understands both. Tests cover both path forms.
+
 ## 1.2.0
 - Fixed: the widget sometimes crashed right after sign-in (Windows event: clr.dll, 0xC0000005). Overlapped USB/HID reads used memory the garbage collector could move while Windows was still finishing them; all HID I/O now uses fixed memory, never frees memory a cancelled request may still touch, runs one conversation at a time, and the first readings are staggered.
 - Fixed: a safety net. The logon task now also relaunches the widget every 5 minutes if it is not running (it does nothing after you chose Exit yourself, until you sign in again).

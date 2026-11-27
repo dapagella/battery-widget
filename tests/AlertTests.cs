@@ -16,6 +16,8 @@ static class T
     static void Expect(string name, int count) { bool ok = got.Count == count; if (!ok) fails++; Console.WriteLine((ok ? "PASS " : "FAIL ") + name + " -> alerts: " + got.Count + " (expected " + count + ")" + (got.Count > 0 ? "  [" + got[got.Count - 1].Title + ": " + got[got.Count - 1].Body + "]" : "")); got.Clear(); }
     static void Fresh() { var cfg = new Config(); got.Clear(); e = new AlertEngine(cfg, t => got.Add(t), () => now); }
 
+    static void Path(string name, string p, ushort vid, ushort[] pids, bool want) { bool ok = Native.PathMatches(p.ToLowerInvariant(), vid, pids) == want; if (!ok) fails++; Console.WriteLine((ok ? "PASS " : "FAIL ") + name); }
+
     static void Main()
     {
         Fresh(); Step(0, D("mouse", 90)); Step(15, D("mouse", 90)); Step(60, D("mouse", 90)); Expect("mouse stays at 90 %: nothing", 0);
@@ -37,6 +39,10 @@ static class T
         Fresh(); Step(0, D("u", 60, true)); Step(30, D("u", 61, true)); Step(60, D("u", 100, false)); Step(100, D("u", 100, false)); Expect("unplugged then reads 100 % without charging: nothing", 0);
         Fresh(); Step(0, D("g", 98, true)); Step(20, D("g", 99, true)); Step(40, D("g", 100, false)); Step(80, D("g", 100, false)); Expect("climbs 98 -> 99 -> 100 and the device stops flagging charging: ONE fully-charged alert", 1);
         Fresh(); Step(0, D("c", 18)); Step(40, D("c", 18)); got.Clear(); Step(60, D("c", 40, true)); Step(3600, D("c", 90)); Step(7200, D("c", 19)); Step(7240, D("c", 19)); Expect("after a full recharge it can warn again", 1);
+        var ds4 = new ushort[] { 0x05C4, 0x09CC, 0x0BA0 };
+        Path("USB DualShock 4 path", @"\\?\hid#vid_054c&pid_09cc&col01#7&1#{4d1e55b2}", 0x054C, ds4, true);
+        Path("Bluetooth DualShock 4 path", @"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_dev_vid&0002054c_pid&09cc_rev&0100_aabbcc#9&2&0000#{4d1e55b2}", 0x054C, ds4, true);
+        Path("other Bluetooth vendor", @"\\?\hid#{00001124-0000-1000-8000-00805f9b34fb}_dev_vid&0002046d_pid&b023_rev&0100#9&2&0000", 0x054C, ds4, false);
         Console.WriteLine(fails == 0 ? "\nALL PASSED" : "\nFAILURES: " + fails);
         Environment.Exit(fails == 0 ? 0 : 1);
     }

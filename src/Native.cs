@@ -194,6 +194,16 @@ namespace BatteryWidget
             finally { h.Close(); }
         }
 
+        /// <summary>USB paths read "vid_054c&amp;pid_09cc"; Bluetooth HID paths read "vid&amp;0002054c_pid&amp;09cc" (vendor-source prefix 0002 = Bluetooth SIG, 0001 = USB-IF).</summary>
+        public static bool PathMatches(string lowerPath, ushort vid, ushort[] pids)
+        {
+            string v = vid.ToString("x4");
+            if (!lowerPath.Contains("vid_" + v) && !lowerPath.Contains("vid&0002" + v) && !lowerPath.Contains("vid&0001" + v)) return false;
+            if (pids == null) return true;
+            foreach (var pid in pids) { string p = pid.ToString("x4"); if (lowerPath.Contains("pid_" + p) || lowerPath.Contains("pid&" + p)) return true; }
+            return false;
+        }
+
         public static List<HidInfo> FindHid(ushort vid, ushort[] pids)
         {
             var res = new List<HidInfo>();
@@ -218,9 +228,7 @@ namespace BatteryWidget
                     if (path == null) continue;
                     // cheap pre-filter on the path text
                     var lp = path.ToLowerInvariant();
-                    if (!lp.Contains("vid_" + vid.ToString("x4"))) continue;
-                    bool pidOk = pids == null; if (pids != null) foreach (var pid in pids) if (lp.Contains("pid_" + pid.ToString("x4"))) pidOk = true;
-                    if (!pidOk) continue;
+                    if (!PathMatches(lp, vid, pids)) continue;
                     var h = CreateFile(path, 0, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
                     if (h.IsInvalid) continue;
                     var at = new HIDD_ATTRIBUTES(); at.Size = Marshal.SizeOf(at);
