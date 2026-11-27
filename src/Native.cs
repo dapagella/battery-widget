@@ -23,6 +23,9 @@ namespace BatteryWidget
         [DllImport("shell32.dll")] public static extern int SHQueryUserNotificationState(out int state);
         [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
         [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+        [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
+        [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
 
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public const uint SWP_NOSIZE = 1, SWP_NOMOVE = 2, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40;

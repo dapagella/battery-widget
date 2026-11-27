@@ -43,6 +43,9 @@ namespace BatteryWidget
             Pump();
         }
 
+        public bool Active { get { return current != null; } }
+        public void DismissCurrent() { if (current != null) Close(current); }
+
         void Pump()
         {
             if (current != null || queue.Count == 0) return;
@@ -96,6 +99,7 @@ namespace BatteryWidget
                     {
                         if (x + bw > m.Rect.Right - 8) x = m.Rect.Right - bw - 8; if (x < m.Rect.Left + 8) x = m.Rect.Left + 8;
                         if (y < m.Rect.Top + 8) y = wr.Bottom + (int)(10 * sc);      // taskbar at the top: appear below it
+                        if (y + bh > m.Rect.Bottom - 8) y = m.Rect.Bottom - bh - 8;  // never past the bottom edge either
                         break;
                     }
                 Native.SetWindowPos(h, Native.HWND_TOPMOST, x, y, bw, bh, Native.SWP_NOACTIVATE | Native.SWP_SHOWWINDOW);

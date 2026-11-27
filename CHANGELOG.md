@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.3
+- Fixed: the right-click menu stayed open (blurry) until you clicked the widget. It now closes with a click anywhere outside it, or Esc.
+- Fixed: notices, the hover card, the size box and the menu no longer overlap. A notice waits while a menu or the size box is open, the hover card stays away while a notice shows, and nothing is placed past the screen edge.
+
 ## 1.2.2
 - Fixed: a Bluetooth device (gamepad, headset...) kept showing its battery for about two minutes after you switched Bluetooth off or it disconnected. Bluetooth and XInput devices now disappear as soon as Windows reports them gone; only USB receivers keep the short grace period that stops them blinking.
 

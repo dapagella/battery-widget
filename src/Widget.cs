@@ -56,7 +56,41 @@ namespace BatteryWidget
         // used by the notification cards
         public IntPtr Handle { get { return hwnd; } }
         public double CurrentScale { get { return curScale; } }
-        public bool IsSuppressed { get { return Suppressed; } }
+        public bool IsSuppressed { get { return Suppressed || menuOpen || sizeBox != null; } }   // notices wait while a menu is open, so nothing overlaps
+
+        // ---- menu: this window never takes focus, so Windows can't tell us about clicks elsewhere; watch the mouse ourselves ----
+        bool menuOpen, wasDown;
+        readonly DispatcherTimer menuWatch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+        void WatchMenu(ContextMenu m)
+        {
+            m.Opened += (s, e) =>
+            {
+                menuOpen = true; wasDown = true;     // the click that opened it is still down: ignore it
+                try { if (sizeBox != null) sizeBox.Close(); } catch { }
+                toaster.DismissCurrent();
+                foreach (var v in views) { try { v.Tip.IsOpen = false; ToolTipService.SetIsEnabled(v.Hit, false); } catch { } }
+                menuWatch.Start();
+            };
+            m.Closed += (s, e) =>
+            {
+                menuOpen = false; menuWatch.Stop();
+                foreach (var v in views) { try { ToolTipService.SetIsEnabled(v.Hit, true); } catch { } }
+            };
+        }
+        void MenuWatchTick()
+        {
+            bool down = (Native.GetAsyncKeyState(0x01) & 0x8000) != 0 || (Native.GetAsyncKeyState(0x02) & 0x8000) != 0 || (Native.GetAsyncKeyState(0x04) & 0x8000) != 0;
+            bool esc = (Native.GetAsyncKeyState(0x1B) & 0x8000) != 0;
+            bool press = down && !wasDown; wasDown = down;
+            var cm = ContextMenu; if (cm == null || !cm.IsOpen) { menuWatch.Stop(); return; }
+            if (esc) { cm.IsOpen = false; return; }
+            if (!press) return;
+            Native.POINT p; Native.GetCursorPos(out p);
+            var h = Native.GetAncestor(Native.WindowFromPoint(p), 2);       // GA_ROOT
+            uint pid = 0; if (h != IntPtr.Zero) Native.GetWindowThreadProcessId(h, out pid);
+            bool insideMenu = pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id && h != hwnd;   // the menu and its submenus are our windows; the widget itself is not "inside"
+            if (!insideMenu) cm.IsOpen = false;
+        }
 
         // =====================================================================
         //  Updates: one quiet check a day; a notification offers a one-click update
@@ -78,7 +112,7 @@ namespace BatteryWidget
                 toaster.Show(new ToastItem { Title = "G915 X LIGHTSPEED TKL", Body = Loc.T("Batería baja") + ": 18 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Warn, Kind = Kind.Keyboard, Seconds = 4 });
                 toaster.Show(new ToastItem { Title = "HyperX Cloud II Wireless", Body = Loc.T("Batería muy baja") + ": 8 %. " + Loc.T("Conéctalo a cargar."), Accent = Theme.Bad, Kind = Kind.Headset, Seconds = 4 });
                 toaster.Show(new ToastItem { Title = "G305", Body = Loc.T("Cargado al 100 %.") + " " + Loc.T("Ya puedes desenchufarlo."), Accent = Theme.Good, Kind = Kind.Mouse, Seconds = 4 });
-                toaster.Show(new ToastItem { Title = Loc.T("Hay una versión nueva") + " (1.2.2)", Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."), Button = Loc.T("Actualizar"), OnButton = () => { }, Accent = Theme.Good, Kind = Kind.Other, Seconds = 5 });
+                toaster.Show(new ToastItem { Title = Loc.T("Hay una versión nueva") + " (1.2.3)", Body = Loc.T("Se instala en unos segundos y el widget se reinicia solo."), Button = Loc.T("Actualizar"), OnButton = () => { }, Accent = Theme.Good, Kind = Kind.Other, Seconds = 5 });
             };
             t.Start();
         }
@@ -157,7 +191,8 @@ namespace BatteryWidget
             SizeChanged += (s, e) => { if (e.WidthChanged && !inReposition) { lastKey = ""; Reposition(true); } };
             StartAppsWatcher();
             MouseLeftButtonDown += OnDragStart; MouseMove += OnDragMove; MouseLeftButtonUp += OnDragEnd;
-            ContextMenuOpening += (s, e) => { ContextMenu = BuildMenu(); };
+            menuWatch.Tick += (s, e) => { try { MenuWatchTick(); } catch (Exception ex) { Log.Err("menu watch: " + ex.Message); } };
+            ContextMenuOpening += (s, e) => { var m = BuildMenu(); WatchMenu(m); ContextMenu = m; };
             Loaded += (s, e) => { Rebuild(); };
             SourceInitialized += (s, e) =>
             {
@@ -425,7 +460,8 @@ namespace BatteryWidget
         ToolTip MakeTip()
         {
             var tip = new ToolTip { Placement = PlacementMode.Top, HasDropShadow = false, Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0), VerticalOffset = -8, Template = Theme.TipTemplate };
-            tip.Opened += (s, e) => tip.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Theme.Fast));
+            // a notice sits in the same spot as the hover card: while one is showing, the hover card stays away (and vice versa, see IsSuppressed)
+            tip.Opened += (s, e) => { if (toaster != null && toaster.Active || menuOpen) { tip.IsOpen = false; return; } tip.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, Theme.Fast)); };
             return tip;
         }
 
