@@ -58,38 +58,56 @@ namespace BatteryWidget
             return c;
         }
 
+        public long SavedUtc;                   // when this copy was written; the newest readable copy always wins at start-up
+        public static string LoadedFrom = "defaults";
+
         public static Config Load()
         {
             FileExisted = File.Exists(FilePath) || File.Exists(BackupPath);
-            foreach (var path in new[] { FilePath, BackupPath })     // main file first, then the last good copy
+            // Both the main file and its backup are read and the NEWER one wins (by the time stamp stored inside, or the file's date
+            // for copies written by older versions): a stale or damaged main file can never hide what you chose last.
+            Config best = null; string bestFrom = null; long bestScore = long.MinValue;
+            foreach (var path in new[] { FilePath, BackupPath })
             {
                 try
                 {
-                    var c = TryParse(path);
-                    if (c != null) { if (path == BackupPath) Log.Err("config.json unreadable, restored from backup"); return c; }
+                    var c = TryParse(path); if (c == null) continue;
+                    long score = Math.Max(c.SavedUtc, File.GetLastWriteTimeUtc(path).Ticks);
+                    if (score > bestScore) { best = c; bestFrom = Path.GetFileName(path); bestScore = score; }
                 }
                 catch (Exception e) { Log.Err("could not read " + Path.GetFileName(path) + ": " + e.Message); }
+            }
+            if (best != null)
+            {
+                LoadedFrom = bestFrom;
+                Log.Note("settings loaded from " + bestFrom + ": " + best.Design + "/" + best.Background + "/" + best.Shape + " size " + best.SizeFactor + " screen " + best.Monitor);
+                return best;
             }
             if (FileExisted)
             {
                 LoadFailed = true;
                 try { File.Copy(FilePath, Path.Combine(Dir, "config.unreadable.json"), true); } catch { }
             }
+            Log.Note(FileExisted ? "settings UNREADABLE: using defaults, nothing will be overwritten until you change something" : "no settings yet: defaults");
             return new Config();
         }
 
-        int saveLock;
         public void Save()
         {
             if (LoadFailed) { LoadFailed = false; }   // the user changed something on purpose: from now on this is the real config
             try
             {
                 Directory.CreateDirectory(Dir);
+                SavedUtc = DateTime.UtcNow.Ticks;
                 string json = new JavaScriptSerializer().Serialize(this);
                 string tmp = FilePath + ".tmp";
                 File.WriteAllText(tmp, json);                       // write to a temp file, then swap: a crash can't leave half a file
-                if (File.Exists(FilePath)) File.Replace(tmp, FilePath, BackupPath);
-                else File.Move(tmp, FilePath);
+                try { if (File.Exists(FilePath)) File.Replace(tmp, FilePath, BackupPath); else File.Move(tmp, FilePath); }
+                catch (Exception e) { Log.Err("swap failed (" + e.Message + "), writing directly"); File.WriteAllText(FilePath, json); }
+                // trust, but verify: read it back; if what is on disk is not what we wrote, write it again
+                string back; try { back = File.ReadAllText(FilePath); } catch { back = null; }
+                if (back != json) { Log.Err("settings read-back mismatch, rewriting"); File.WriteAllText(FilePath, json); }
+                Log.Note("settings saved: " + Design + "/" + Background + "/" + Shape + " size " + SizeFactor + " screen " + Monitor);
             }
             catch (Exception e) { Log.Err("could not save settings: " + e.Message); }
         }

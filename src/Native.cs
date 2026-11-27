@@ -11,7 +11,7 @@ namespace BatteryWidget
     [StructLayout(LayoutKind.Sequential)]
     public struct DEVPROPKEY { public Guid fmtid; public uint pid; public DEVPROPKEY(string g, uint p) { fmtid = new Guid(g); pid = p; } }
 
-    public static class Native
+    public static partial class Native
     {
         // ---- window / taskbar ----
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string cls, string title);
@@ -178,7 +178,9 @@ namespace BatteryWidget
         public class HidInfo { public string Path, Product; public ushort Vid, Pid, UsagePage, Usage, InLen, OutLen, FeatLen; }
 
         /// <summary>Feature-report round trip (set, wait, get) used by Razer devices. buf[0] is the report id.</summary>
-        public static byte[] HidFeature(HidInfo info, byte[] request, int delayMs)
+        public static byte[] HidFeature(HidInfo info, byte[] request, int delayMs) { lock (HidGate) return HidFeatureCore(info, request, delayMs); }
+
+        static byte[] HidFeatureCore(HidInfo info, byte[] request, int delayMs)
         {
             var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
             if (h.IsInvalid) return null;
@@ -236,112 +238,5 @@ namespace BatteryWidget
             return res;
         }
 
-        /// <summary>Optionally reads a feature report (some pads only start streaming full reports after that), then listens
-        /// for input reports until accept() is satisfied or the time is up. Sends nothing.</summary>
-        /// <summary>Diagnostics: result of the feature read and the first few reports a collection sends (id, length, first bytes).</summary>
-        public static string HidSample(HidInfo info, int timeoutMs, byte featureId)
-        {
-            var sb = new StringBuilder();
-            var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
-            if (h.IsInvalid) h = CreateFile(info.Path, 0x80000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
-            if (h.IsInvalid) return "open failed (error " + Marshal.GetLastWin32Error() + ")";
-            IntPtr ev = CreateEvent(IntPtr.Zero, true, false, null);
-            try
-            {
-                if (featureId != 0 && info.FeatLen > 0)
-                {
-                    var f = new byte[info.FeatLen]; f[0] = featureId;
-                    bool ok = HidD_GetFeature(h, f, f.Length);
-                    sb.Append("feature 0x" + featureId.ToString("X2") + (ok ? " ok" : " failed (" + Marshal.GetLastWin32Error() + ")") + "; ");
-                }
-                var deadline = Environment.TickCount + timeoutMs; int n = 0;
-                while (n < 4)
-                {
-                    int left = deadline - Environment.TickCount; if (left <= 0) break;
-                    var buf = new byte[info.InLen]; ResetEvent(ev);
-                    var ro = new OVERLAPPED { hEvent = ev };
-                    bool rok = ReadFile(h, buf, buf.Length, IntPtr.Zero, ref ro);
-                    if (!rok && Marshal.GetLastWin32Error() != 997) { sb.Append("read error " + Marshal.GetLastWin32Error()); break; }
-                    if (!rok && WaitForSingleObject(ev, (uint)left) != 0) { CancelIo(h); WaitForSingleObject(ev, 50); break; }
-                    int cnt; if (GetOverlappedResult(h, ref ro, out cnt, false) && cnt > 0) { sb.Append("[id " + buf[0].ToString("X2") + " len " + cnt + ": " + BitConverter.ToString(buf, 0, Math.Min(cnt, 14)) + "] "); n++; }
-                }
-                if (n == 0) sb.Append("no input reports");
-            }
-            finally { CloseHandle(ev); h.Close(); }
-            return sb.ToString();
-        }
-
-        public static byte[] HidListen(HidInfo info, int timeoutMs, Func<byte[], bool> accept, byte featureId = 0)
-        {
-            var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
-            if (h.IsInvalid) h = CreateFile(info.Path, 0x80000000, 3, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
-            if (h.IsInvalid) return null;
-            IntPtr ev = CreateEvent(IntPtr.Zero, true, false, null);
-            try
-            {
-                if (featureId != 0 && info.FeatLen > 0) { var f = new byte[info.FeatLen]; f[0] = featureId; HidD_GetFeature(h, f, f.Length); }
-                var deadline = Environment.TickCount + timeoutMs;
-                while (true)
-                {
-                    int left = deadline - Environment.TickCount; if (left <= 0) break;
-                    var buf = new byte[info.InLen];
-                    ResetEvent(ev);
-                    var ro = new OVERLAPPED { hEvent = ev };
-                    bool rok = ReadFile(h, buf, buf.Length, IntPtr.Zero, ref ro);
-                    if (!rok && Marshal.GetLastWin32Error() != 997) break;
-                    if (!rok && WaitForSingleObject(ev, (uint)left) != 0) { CancelIo(h); WaitForSingleObject(ev, 50); break; }
-                    int cnt;
-                    if (GetOverlappedResult(h, ref ro, out cnt, false) && cnt > 0)
-                    {
-                        var r = new byte[cnt]; Array.Copy(buf, r, cnt);
-                        if (accept(r)) return r;
-                    }
-                }
-            }
-            finally { CloseHandle(ev); h.Close(); }
-            return null;
-        }
-
-        /// <summary>Sends one output report and collects reports for up to timeoutMs. Returns list of input reports.</summary>
-        public static List<byte[]> HidExchange(HidInfo info, byte[] output, int timeoutMs, out string error, bool preRead = true, Func<byte[], bool> accept = null)
-        {
-            error = null;
-            var got = new List<byte[]>();
-            var h = CreateFile(info.Path, 0xC0000000, 3, IntPtr.Zero, 3, 0x40000000 /*OVERLAPPED*/, IntPtr.Zero);
-            if (h.IsInvalid) { error = "open " + Marshal.GetLastWin32Error(); return got; }
-            IntPtr ev = CreateEvent(IntPtr.Zero, true, false, null);
-            try
-            {
-                // some firmwares (HyperX Kingston) expect an input-report read before the first write
-                if (preRead) try { var pre = new byte[info.InLen]; pre[0] = 0x06; HidD_GetInputReport(h, pre, pre.Length); } catch { }
-                var wo = new OVERLAPPED { hEvent = ev };
-                var pkt = new byte[info.OutLen]; Array.Copy(output, pkt, Math.Min(output.Length, pkt.Length));
-                bool ok = WriteFile(h, pkt, pkt.Length, IntPtr.Zero, ref wo);
-                if (!ok)
-                {
-                    int e = Marshal.GetLastWin32Error();
-                    if (e != 997) { error = "write " + e; return got; }
-                    if (WaitForSingleObject(ev, 1000) != 0) { CancelIo(h); error = "write timeout"; return got; }
-                    int n; if (!GetOverlappedResult(h, ref wo, out n, false)) { error = "write " + Marshal.GetLastWin32Error(); return got; }
-                }
-                var deadline = Environment.TickCount + timeoutMs;
-                while (true)
-                {
-                    int left = deadline - Environment.TickCount; if (left <= 0) break;
-                    var buf = new byte[info.InLen];
-                    ResetEvent(ev);
-                    var ro = new OVERLAPPED { hEvent = ev };
-                    bool rok = ReadFile(h, buf, buf.Length, IntPtr.Zero, ref ro);
-                    if (!rok && Marshal.GetLastWin32Error() != 997) { error = "read " + Marshal.GetLastWin32Error(); break; }
-                    if (!rok)
-                    {
-                        if (WaitForSingleObject(ev, (uint)left) != 0) { CancelIo(h); WaitForSingleObject(ev, 50); break; }
-                    }
-                    int cnt; if (GetOverlappedResult(h, ref ro, out cnt, false) && cnt > 0) { var r = new byte[cnt]; Array.Copy(buf, r, cnt); got.Add(r); if (accept != null && accept(r)) break; }
-                }
-            }
-            finally { CloseHandle(ev); h.Close(); }
-            return got;
-        }
     }
 }

@@ -24,7 +24,7 @@ namespace BatteryWidget
 "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
 "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n" +
 "  <RegistrationInfo><Description>Battery Widget: starts the battery widget when you sign in.</Description></RegistrationInfo>\r\n" +
-"  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + esc(user) + "</UserId><Delay>PT5S</Delay></LogonTrigger></Triggers>\r\n" +
+"  <Triggers><LogonTrigger><Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><Enabled>true</Enabled><UserId>" + esc(user) + "</UserId><Delay>PT5S</Delay></LogonTrigger></Triggers>\r\n" +
 "  <Principals><Principal id=\"Author\"><UserId>" + esc(user) + "</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>\r\n" +
 "  <Settings>\r\n" +
 "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n" +
@@ -43,7 +43,7 @@ namespace BatteryWidget
 "    <Priority>7</Priority>\r\n" +
 "    <RestartOnFailure><Interval>PT1M</Interval><Count>5</Count></RestartOnFailure>\r\n" +
 "  </Settings>\r\n" +
-"  <Actions Context=\"Author\"><Exec><Command>" + esc(exe) + "</Command><WorkingDirectory>" + esc(Path.GetDirectoryName(exe)) + "</WorkingDirectory></Exec></Actions>\r\n" +
+"  <Actions Context=\"Author\"><Exec><Command>" + esc(exe) + "</Command><Arguments>--from-task</Arguments><WorkingDirectory>" + esc(Path.GetDirectoryName(exe)) + "</WorkingDirectory></Exec></Actions>\r\n" +
 "</Task>";
         }
 

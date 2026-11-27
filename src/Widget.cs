@@ -869,7 +869,7 @@ namespace BatteryWidget
             var auto = Mi("Iniciar con Windows"); auto.IsCheckable = true; auto.IsChecked = Config.GetAutoStart();
             auto.Click += (s, e) => { bool want = auto.IsChecked; System.Threading.ThreadPool.QueueUserWorkItem(_ => Config.SetAutoStart(want, true)); }; m.Items.Add(auto);
             m.Items.Add(Sep());
-            var ex = Mi("Salir"); ex.Click += (s, e) => Application.Current.Shutdown(); m.Items.Add(ex);
+            var ex = Mi("Salir"); ex.Click += (s, e) => { UserQuit.Mark(); Application.Current.Shutdown(); }; m.Items.Add(ex);
             return m;
         }
 

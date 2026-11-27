@@ -30,6 +30,22 @@ namespace BatteryWidget
     public static class Log
     {
         public static bool Enabled;
+        /// <summary>Always written: one line per start / settings load / settings save in startup.log, so "it forgot my settings" can be traced.</summary>
+        public static void Note(string s)
+        {
+            try
+            {
+                lock (L)
+                {
+                    Directory.CreateDirectory(Config.Dir);
+                    var f = Path.Combine(Config.Dir, "startup.log");
+                    if (File.Exists(f) && new FileInfo(f).Length > 60000) File.Delete(f);
+                    File.AppendAllText(f, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss ") + s + "\r\n");
+                }
+            }
+            catch { }
+        }
+
         /// <summary>Always written (no --debug needed): crashes and unexpected errors go to %APPDATA%\BatteryWidget\error.log.</summary>
         public static void Err(string s)
         {
@@ -344,14 +360,17 @@ namespace BatteryWidget
 
         public void Start()
         {
+            int i = 0;
             foreach (var s in sources)
             {
                 var src = s; var running = 0;
+                // stagger the first reading: all sources probing devices at the same instant (while Windows is still signing in)
+                // is exactly when things used to go wrong
                 var t = new Timer(_ =>
                 {
                     if (Interlocked.Exchange(ref running, 1) == 1) return;
                     try { Update(src); } finally { running = 0; }
-                }, null, 0, src.IntervalSec * 1000);
+                }, null, 2000 + 700 * i++, src.IntervalSec * 1000);
                 timers.Add(t);
             }
         }
@@ -433,7 +452,7 @@ namespace BatteryWidget
 
         // When two sources see the same physical device (e.g. G HUB and direct HID++, or a Bluetooth node), the more
         // specific source wins and the other copy is dropped.
-        static readonly string[] Priority = { "ghub", "gamesir", "ds4", "hyperx", "headsets", "razer", "corsair", "hidpp", "bt", "xinput" };
+        static readonly string[] Priority = { "ghub", "gamesir", "ds4", "hyperx", "headsets", "razer", "corsair", "hidpp", "bt", "ble", "xinput" };
         static string Norm(string s) { var sb = new System.Text.StringBuilder(); foreach (char c in (s ?? "").ToLowerInvariant()) if (char.IsLetterOrDigit(c)) sb.Append(c); return sb.ToString(); }
         static int Rank(string src) { int i = Array.IndexOf(Priority, src); return i < 0 ? 99 : i; }
 

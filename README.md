@@ -31,7 +31,8 @@ Requires Windows 10/11 (uses the .NET Framework 4.8 that ships with Windows).
 | **Logitech** | G / MX / LIGHTSPEED keyboards, mice, headsets | [G HUB](https://www.logitechg.com/innovation/g-hub.html)'s local service; without G HUB, **HID++ 2.0** straight from Unifying / Bolt / LIGHTSPEED receivers | ✅ tested (G915 X, G305) |
 | **HyperX** | Cloud II Wireless (both dongles), Cloud Alpha Wireless, Cloud Flight | USB receiver (HID) | ✅ Cloud II tested · ⚠️ others from public protocols |
 | **Corsair** | VOID / HS-series wireless headsets (USB dongle), wireless mice such as the **Katar** (Slipstream dongle), Virtuoso/HS80 | USB receiver (HID): vendor and "Bragi" protocols | ✅ VOID headset tested by a user · ⚠️ mice from public protocols, untested |
-| **PlayStation** | DualShock 4 over Bluetooth or USB | HID input report | ⚠️ from public protocols, untested |
+| **PlayStation** | DualShock 4 over Bluetooth or USB | HID input report (the pad is asked to send its full report; both calibration requests are tried) | ✅ USB tested by a user · ⚠️ Bluetooth from public protocols, untested |
+| **Any Bluetooth LE device** | mice, keyboards, headsets, earbuds, trackers with the standard Battery Service | GATT battery level, read-only, once a minute | ⚠️ generic, untested on real hardware |
 | **Razer** | wireless mice, keyboards, headsets with a USB dongle (Viper, DeathAdder, Basilisk, Naga, Cobra, BlackWidow…) | Razer Chroma feature-report protocol, auto-detected (no model list) | ⚠️ from public protocols, untested |
 | **GameSir** | Nova 2 family on the 2.4 GHz dongle | USB dongle (HID) | ✅ tested |
 | **ASUS (ROG), Redragon and any other brand** | anything that connects by **Bluetooth** and reports battery (classic or Bluetooth LE) | Windows' own Bluetooth data | ✅ generic |
@@ -111,5 +112,6 @@ Device protocols are based on the open-source documentation of [HeadsetControl](
 ## My device doesn't show up
 
 1. Make sure it is **on and connected** (wired devices are not shown).
+   Starting problems or settings that "don't stick"? `%APPDATA%\BatteryWidget\startup.log` lists every start and every settings load/save, and `error.log` any error: attach them to an issue.
 2. Right-click the widget → **Save diagnostics**. It writes `diagnostic.txt` (opens its folder) with the names and USB ids Windows sees and what Corsair / PlayStation devices answer — no personal data.
 3. [Open an issue](../../issues/new) and attach that file with the exact model. That is all that's needed to add a device.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+- Fixed: the widget sometimes crashed right after sign-in (Windows event: clr.dll, 0xC0000005). Overlapped USB/HID reads used memory the garbage collector could move while Windows was still finishing them; all HID I/O now uses fixed memory, never frees memory a cancelled request may still touch, runs one conversation at a time, and the first readings are staggered.
+- Fixed: a safety net. The logon task now also relaunches the widget every 5 minutes if it is not running (it does nothing after you chose Exit yourself, until you sign in again).
+- Fixed: settings. The newest of the settings file and its backup always wins, what is written is read back and verified, settings are also saved when Windows shuts down, and `startup.log` records every load and save.
+- New: any Bluetooth LE device with the standard Battery Service is read directly (mice, keyboards, headsets, earbuds, trackers from any brand).
+- Improved: DualShock 4 over Bluetooth asks for both calibration reports and listens longer; "Save diagnostics" shows exactly what the pad answers.
+
 ## 1.1.1
 - Notifications are now stricter: a reading must hold for 30 s before it is announced (one glitchy reading can't fire an alert); estimates and coarse readings (4-step gamepads) never trigger; "fully charged" only counts a real climb to 100 %. 19 scripted scenarios in `tests/` run on every build.
 

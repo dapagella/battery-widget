@@ -21,16 +21,21 @@ namespace BatteryWidget
         static void Run(string[] args)
         {
             if (Array.IndexOf(args, "--diag") >= 0) { Console.Out.Flush(); try { Diagnostics.Write(); } catch (Exception e) { Log.Err("diag: " + e); } return; }
+            // The logon task re-launches the widget every 5 minutes if it is not running (a safety net if it ever crashes).
+            // If you chose "Exit" yourself, that launch does nothing until you sign in again.
+            if (Array.IndexOf(args, "--from-task") >= 0 && UserQuit.Active()) return;
             bool created;
             using (var mutex = new Mutex(true, "Local\\BatteryWidget.TaskbarWidget", out created))
             {
                 if (!created) return; // already running
+                if (Array.IndexOf(args, "--from-task") < 0) UserQuit.Clear();   // you started it by hand: it should keep running again
                 Native.MakeDpiAware();
                 var cfg = Config.Load();
                 bool debugFlag = Array.IndexOf(args, "--debug") >= 0;   // not written back to config.json
                 ForceVisible = Array.IndexOf(args, "--always-visible") >= 0;
                 Log.Enabled = cfg.Debug || debugFlag;
                 Log.W("start " + Environment.OSVersion.VersionString + " " + (Environment.Is64BitProcess ? "x64" : "x86"));
+                Log.Note("start v" + typeof(Program).Assembly.GetName().Version + " pid " + System.Diagnostics.Process.GetCurrentProcess().Id + " (" + string.Join(" ", args) + ")");
                 Native.EnableEcoMode();
                 if (!cfg.AutoStartInitDone && !Config.LoadFailed) { cfg.AutoStartInitDone = true; cfg.Save(); System.Threading.ThreadPool.QueueUserWorkItem(_ => Config.SetAutoStart(true)); }   // first run: turn "start with Windows" on
                 else System.Threading.ThreadPool.QueueUserWorkItem(_ => { try { if (Config.GetAutoStart()) Config.SetAutoStart(true); } catch { } });   // self-heal: keeps the task and path current
@@ -45,12 +50,14 @@ namespace BatteryWidget
                 hub.Add(new CorsairBragiSource());
                 hub.Add(new DualShock4Source());
                 hub.Add(new BluetoothSource(() => cfg.PinnedBluetooth.ToArray()));
+                hub.Add(new BleBatterySource());
                 hub.Add(new GameSirSource(() => cfg.GamepadName));
                 hub.Add(new XInputSource(() => Loc.T("Control inalámbrico")));
 
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 // a bug must never take the widget down (or show a crash dialog): log it and keep going
                 app.DispatcherUnhandledException += (s, e) => { Log.Err("UI error: " + e.Exception); e.Handled = true; };
+                app.SessionEnding += (s, e) => { if (!Config.LoadFailed) cfg.Save(); History.Instance.Flush(); Estimator.Instance.Flush(); Log.Note("exit (Windows is shutting down / signing out)"); };
                 var win = new WidgetWindow(cfg, hub);
                 win.Show();
                 hub.Start();
@@ -58,6 +65,7 @@ namespace BatteryWidget
                 if (Array.IndexOf(args, "--demo-alerts") >= 0) win.DemoAlerts();
                 app.Run();
                 if (!Config.LoadFailed) cfg.Save();
+                Log.Note("exit (normal)");
                 Estimator.Instance.Flush();
                 History.Instance.Flush();
             }

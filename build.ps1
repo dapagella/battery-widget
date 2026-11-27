@@ -12,7 +12,10 @@ function Find-Dll($name) {
   if ($f) { return $f.FullName }
   throw "Could not find $name.dll"
 }
-$refs = 'PresentationFramework','PresentationCore','WindowsBase','System.Xaml','UIAutomationClient','UIAutomationTypes','System.Web.Extensions','System','System.Core' | % { Find-Dll $_ }
+$refs = 'PresentationFramework','PresentationCore','WindowsBase','System.Xaml','UIAutomationClient','UIAutomationTypes','System.Web.Extensions','System','System.Core',
+        'System.Runtime' | % { Find-Dll $_ }
+# Windows Runtime metadata (Bluetooth LE battery service): ships with Windows 10/11
+$refs += (Get-ChildItem "$env:SystemRoot\System32\WinMetadata\*.winmd" | % FullName)
 
 # version info (shown in file properties)
 $info = Join-Path $out 'AssemblyInfo.generated.cs'

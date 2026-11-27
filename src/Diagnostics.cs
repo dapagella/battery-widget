@@ -66,7 +66,7 @@ namespace BatteryWidget
             try
             {
                 foreach (var h in seen.Where(x => x.Vid == 0x054C))
-                    sb.AppendLine("  " + h.Pid.ToString("X4") + " page=" + h.UsagePage.ToString("X") + "/" + h.Usage.ToString("X") + " -> " + (h.UsagePage == 1 && h.Usage == 5 ? Native.HidSample(h, 1500, 0x02) : "(skipped)"));
+                    sb.AppendLine("  " + h.Pid.ToString("X4") + " page=" + h.UsagePage.ToString("X") + "/" + h.Usage.ToString("X") + " -> " + (h.UsagePage == 1 && h.Usage == 5 ? Native.HidSample(h, 2500, 0x02, 0x05) : "(skipped)"));
             }
             catch (Exception e) { sb.AppendLine("  error: " + e.Message); }
             sb.AppendLine();

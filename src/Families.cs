@@ -366,7 +366,7 @@ namespace BatteryWidget
                 foreach (var h in pads)
                 {
                     int idx = -1;
-                    var r = Native.HidListen(h, 1500, x => (x[0] == 0x11 && x.Length >= 34) || (x[0] == 0x01 && x.Length >= 32 && h.InLen < 70), 0x02);
+                    var r = Native.HidListen(h, 3000, x => (x[0] == 0x11 && x.Length >= 34) || (x[0] == 0x01 && x.Length >= 32 && h.InLen < 70), 0x02, 0x05);
                     if (r == null) continue;
                     idx = r[0] == 0x11 ? 32 : 30;
                     int b = r[idx], lvl = b & 0x0F; bool cable = (b & 0x10) != 0;
